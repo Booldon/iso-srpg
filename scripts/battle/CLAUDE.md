@@ -1,0 +1,55 @@
+# scripts/battle/ — Battle System
+
+## Files
+
+| 파일 | 역할 |
+|---|---|
+| `grid_manager.gd` | 씬 루트 스크립트. 그리드 생성·경로탐색·입력 처리·유닛 배치·승패 판정 총괄 |
+| `turn_manager.gd` | 턴 순서 관리. 팀별 speed 정렬 후 페어 인터리빙, `turn_started` 시그널 발행 |
+| `unit.gd` | 유닛 컴포넌트. 런타임 상태(`is_player`, `stats`, `grid_col/row`, `is_moving`) 보유. `move_along_path()` 로 셀 단위 트윈 이동 |
+| `combat.gd` | 순수 데미지 계산. `Combat.resolve_attack(attacker, target, hit_armor)` 로 stats 직접 수정 |
+| `attack_menu.gd` | CanvasLayer UI. `armor_chosen` / `strength_chosen` / `cancelled` 시그널 발행 |
+| `stats_panel.gd` | CanvasLayer UI. `show_unit(unit)` 로 STR/ARM/SPD 표시. 마우스 오버 유닛 우선 |
+| `result_screen.gd` | CanvasLayer UI. `show_victory()` / `show_defeat()` 오버레이 + 씬 리로드 버튼 |
+
+## 씬 트리 (scenes/battle/grid.tscn)
+
+```
+GridRoot (Node2D, grid_manager.gd)
+├── Camera2D
+├── WorldContainer (Node2D)
+│   ├── FloorLayer          ← 타일, 이동범위, 활성타일, 호버타일 (이 순서로 렌더)
+│   └── ActorsLayer         ← 모든 Unit 노드 (y_sort_enabled = true)
+├── TurnManager (Node)
+├── AttackMenu (CanvasLayer)
+├── StatsPanel (CanvasLayer)
+└── ResultScreen (CanvasLayer)
+```
+
+## 턴 흐름
+
+1. `TurnManager.start_battle(units)` — 팀별 speed 정렬 → 페어 구성 → `turn_started` 발행
+2. **플레이어 턴**: `_player_can_act = true`, 이동 범위 표시
+   - 범위 내 빈 칸 클릭 → 이동 → `end_turn()`
+   - 인접 적 클릭 → 공격 메뉴 → 데미지 → 사망 체크 → `end_turn()`
+3. **적 턴**: 0.5초 대기 → 인접 시 랜덤 공격, 아니면 랜덤 이동 → `end_turn()`
+
+## 핵심 불변 조건
+
+- `_unit_at: Dictionary` (Vector2i → Unit) — 점유 맵의 유일한 진실. 이동 전후 반드시 갱신
+- 유닛 생성 시 `.tres`를 `.duplicate()` — 각 유닛이 독립적인 Resource 사본 보유
+- `_player_can_act` — 적 턴·이동 중 입력 차단의 유일한 게이트
+- FloorLayer 렌더 순서: `grid tiles < range tiles < active tile < hover tile` — 범위 갱신 후 `move_child`로 강제 유지
+
+## 데이터 파일 (data/)
+
+| 파일 | STR | ARM | SPD | MOVE |
+|---|---|---|---|---|
+| `protagonist_stats.tres` | 10 | 3 | 12 | 4 |
+| `ally1_stats.tres` | 9 | 2 | 10 | 3 |
+| `ally2_stats.tres` | 7 | 4 | 8 | 3 |
+| `enemy_grunt_stats.tres` | 8 | 2 | 8 | 3 |
+| `enemy_fast_stats.tres` | 6 | 1 | 11 | 5 |
+| `enemy_tank_stats.tres` | 10 | 4 | 5 | 2 |
+
+주인공만 `armor_reduction_immune = true`.

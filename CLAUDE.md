@@ -79,6 +79,7 @@ This is a unique trait, not a general system — do not generalize it prematurel
 - `saves/` — runtime JSON (gitignored)
 - Each scene gets its own folder once it grows past one file (scene + script + sub-resources together)
 - Scene root node name = PascalCase feature name; attach one script per scene root
+- **Each `scripts/` subfolder contains a `CLAUDE.md` with module-specific documentation — read it before editing that module**
 
 ## Key file locations
 - `assets/characters/protagonist/` — 8-dir sprites (92×92px, character_id: `1598650f-b3ed-46a8-b44f-1ec7f750b1dd`)
