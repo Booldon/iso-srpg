@@ -7,4 +7,5 @@ script = ExtResource("1_stats")
 strength = 7
 armor = 4
 speed = 8
+move_range = 3
 armor_reduction_immune = false

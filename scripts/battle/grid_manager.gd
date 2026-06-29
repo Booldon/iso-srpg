@@ -24,6 +24,7 @@ var _active_tween: Tween
 var _player_can_act: bool = false
 var _pending_target: Unit = null
 var _battle_over: bool = false
+var _range_tiles: Array[Polygon2D] = []
 
 
 func _ready() -> void:
@@ -72,14 +73,16 @@ func _input(event: InputEvent) -> void:
 				_pending_target = target
 				_player_can_act = false
 				_attack_menu.show_menu()
-		elif _is_valid_cell(cell) and not _unit_at.has(cell):
+		elif _is_valid_cell(cell) and not _unit_at.has(cell) and _is_in_move_range(active, cell):
 			_do_player_move(active, cell)
 
 
 func _on_turn_started(unit: Unit) -> void:
 	if unit.is_player:
 		_player_can_act = true
+		_show_move_range(unit)
 	else:
+		_clear_move_range()
 		_run_enemy_turn(unit)
 
 
@@ -93,9 +96,11 @@ func _on_attack_strength() -> void:
 
 func _on_attack_cancel() -> void:
 	_player_can_act = true
+	_show_move_range(_turn_manager.current_unit())
 
 
 func _execute_player_attack(hit_armor: bool) -> void:
+	_clear_move_range()
 	var attacker := _turn_manager.current_unit()
 	Combat.resolve_attack(attacker, _pending_target, hit_armor)
 	if _pending_target.stats.strength <= 0:
@@ -108,6 +113,7 @@ func _execute_player_attack(hit_armor: bool) -> void:
 
 
 func _do_player_move(unit: Unit, cell: Vector2i) -> void:
+	_clear_move_range()
 	_player_can_act = false
 	var path := _build_screen_path(unit, cell)
 	if path.is_empty():
@@ -167,6 +173,11 @@ func _check_battle_end() -> void:
 		_result_screen.show_defeat()
 
 
+func _is_in_move_range(unit: Unit, cell: Vector2i) -> bool:
+	var dist: int = absi(cell.x - unit.grid_col) + absi(cell.y - unit.grid_row)
+	return dist <= unit.stats.move_range
+
+
 func _is_adjacent(a: Unit, b: Unit) -> bool:
 	return abs(a.grid_col - b.grid_col) + abs(a.grid_row - b.grid_row) == 1
 
@@ -221,6 +232,36 @@ func _cell_id(col: int, row: int) -> int:
 
 func _is_valid_cell(cell: Vector2i) -> bool:
 	return cell.x >= 0 and cell.x < GRID_COLS and cell.y >= 0 and cell.y < GRID_ROWS
+
+
+func _show_move_range(unit: Unit) -> void:
+	_clear_move_range()
+	var range_val := unit.stats.move_range
+	for row in range(GRID_ROWS):
+		for col in range(GRID_COLS):
+			var cell := Vector2i(col, row)
+			var dist: int = absi(col - unit.grid_col) + absi(row - unit.grid_row)
+			if dist > 0 and dist <= range_val and not _unit_at.has(cell):
+				var tile := Polygon2D.new()
+				tile.polygon = PackedVector2Array([
+					Vector2(0, -TILE_HALF_H),
+					Vector2(TILE_HALF_W, 0),
+					Vector2(0, TILE_HALF_H),
+					Vector2(-TILE_HALF_W, 0),
+				])
+				tile.color = Color(0.2, 0.6, 1.0, 0.3)
+				tile.position = grid_to_screen(col, row)
+				_floor.add_child(tile)
+				_range_tiles.append(tile)
+	# Keep active and hover tiles rendered above range tiles
+	_floor.move_child(_active_tile, -1)
+	_floor.move_child(_hover_tile, -1)
+
+
+func _clear_move_range() -> void:
+	for tile in _range_tiles:
+		tile.queue_free()
+	_range_tiles.clear()
 
 
 func _setup_active_tile() -> void:
