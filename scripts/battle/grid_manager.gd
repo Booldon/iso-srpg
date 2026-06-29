@@ -17,6 +17,8 @@ var _players: Array[Unit] = []
 var _enemies: Array[Unit] = []
 var _unit_at: Dictionary = {}   # Vector2i -> Unit
 var _hover_tile: Polygon2D
+var _active_tile: Polygon2D
+var _active_tween: Tween
 var _player_can_act: bool = false
 var _pending_target: Unit = null
 var _battle_over: bool = false
@@ -25,6 +27,7 @@ var _battle_over: bool = false
 func _ready() -> void:
 	_build_grid()
 	_setup_hover_tile()
+	_setup_active_tile()
 	_setup_pathfinding()
 	_place_players()
 	_place_enemies()
@@ -45,6 +48,12 @@ func _process(_delta: float) -> void:
 		_hover_tile.position = grid_to_screen(cell.x, cell.y)
 	else:
 		_hover_tile.visible = false
+
+	if not _battle_over and not _turn_manager.get_all_units().is_empty():
+		_active_tile.visible = true
+		_active_tile.position = _turn_manager.current_unit().position
+	else:
+		_active_tile.visible = false
 
 
 func _input(event: InputEvent) -> void:
@@ -208,6 +217,22 @@ func _cell_id(col: int, row: int) -> int:
 
 func _is_valid_cell(cell: Vector2i) -> bool:
 	return cell.x >= 0 and cell.x < GRID_COLS and cell.y >= 0 and cell.y < GRID_ROWS
+
+
+func _setup_active_tile() -> void:
+	_active_tile = Polygon2D.new()
+	_active_tile.polygon = PackedVector2Array([
+		Vector2(0, -TILE_HALF_H),
+		Vector2(TILE_HALF_W, 0),
+		Vector2(0, TILE_HALF_H),
+		Vector2(-TILE_HALF_W, 0),
+	])
+	_active_tile.color = Color(1.0, 0.85, 0.0, 0.5)
+	_active_tile.visible = false
+	_floor.add_child(_active_tile)
+	_active_tween = create_tween().set_loops()
+	_active_tween.tween_property(_active_tile, "color:a", 0.2, 0.5)
+	_active_tween.tween_property(_active_tile, "color:a", 0.5, 0.5)
 
 
 func _setup_hover_tile() -> void:
