@@ -23,7 +23,7 @@ Developer directs; Claude generates and debugs all code.
 - **Strength = HP = attack power** (single stat, not two)
 - **Armor** = damage reduction layer
 - On attack, attacker chooses: hit **Armor** (reduce defense) or hit **Strength** (deal lethal damage)
-- Turns alternate strictly: 1 player unit acts → 1 enemy unit acts → repeat
+- Turns alternate strictly 1:1 (player unit → enemy unit → repeat); within each pair, the unit with higher **Speed** acts first
 - **NOT in v1:** Willpower resource, class systems, terrain height bonuses
 
 ## Protagonist special trait

@@ -167,6 +167,7 @@ func _setup_pathfinding() -> void:
 func _place_protagonist() -> void:
 	_protagonist = UNIT_SCENE.instantiate()
 	_protagonist.is_player = true
+	_protagonist.stats = load("res://data/protagonist_stats.tres")
 	_protagonist.grid_col = 0
 	_protagonist.grid_row = 0
 	_protagonist.position = grid_to_screen(0, 0)
@@ -176,6 +177,7 @@ func _place_protagonist() -> void:
 func _place_enemy() -> void:
 	_enemy = UNIT_SCENE.instantiate()
 	_enemy.is_player = false
+	_enemy.stats = load("res://data/enemy_grunt_stats.tres")
 	_enemy.grid_col = 7
 	_enemy.grid_row = 7
 	_enemy.position = grid_to_screen(7, 7)
