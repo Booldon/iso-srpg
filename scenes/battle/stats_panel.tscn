@@ -1,0 +1,32 @@
+[gd_scene format=3 uid="uid://ddndghlm4siyy"]
+
+[ext_resource type="Script" path="res://scripts/battle/stats_panel.gd" id="1_sp"]
+
+[node name="StatsPanel" type="CanvasLayer"]
+script = ExtResource("1_sp")
+
+[node name="Panel" type="Panel" parent="."]
+offset_left = 10.0
+offset_top = 570.0
+offset_right = 210.0
+offset_bottom = 710.0
+
+[node name="VBox" type="VBoxContainer" parent="Panel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 10.0
+offset_right = -12.0
+offset_bottom = -10.0
+
+[node name="Header" type="Label" parent="Panel/VBox"]
+text = "—"
+
+[node name="StrLabel" type="Label" parent="Panel/VBox"]
+text = ""
+
+[node name="ArmLabel" type="Label" parent="Panel/VBox"]
+text = ""
+
+[node name="SpdLabel" type="Label" parent="Panel/VBox"]
+text = ""
