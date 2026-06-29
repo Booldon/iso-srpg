@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3 uid="uid://b5x1y2z3w4v5u6"]
+[gd_scene load_steps=4 format=3 uid="uid://b5x1y2z3w4v5u6"]
 
 [ext_resource type="Script" path="res://scripts/battle/grid_manager.gd" id="1_grid01"]
 [ext_resource type="Script" path="res://scripts/battle/turn_manager.gd" id="2_tm01"]
+[ext_resource type="PackedScene" path="res://scenes/battle/attack_menu.tscn" id="3_am01"]
 
 [node name="GridRoot" type="Node2D"]
 script = ExtResource("1_grid01")
@@ -18,3 +19,5 @@ y_sort_enabled = true
 
 [node name="TurnManager" type="Node" parent="."]
 script = ExtResource("2_tm01")
+
+[node name="AttackMenu" parent="." instance=ExtResource("3_am01")]

@@ -1,0 +1,34 @@
+[gd_scene format=3 uid="uid://ttackmenu001"]
+
+[ext_resource type="Script" path="res://scripts/battle/attack_menu.gd" id="1_am"]
+
+[node name="AttackMenu" type="CanvasLayer"]
+script = ExtResource("1_am")
+visible = false
+
+[node name="Panel" type="Panel" parent="."]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -120.0
+offset_top = -65.0
+offset_right = 120.0
+offset_bottom = 65.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -8.0
+
+[node name="HitArmor" type="Button" parent="Panel/VBoxContainer"]
+text = "Armor 타격"
+
+[node name="HitStrength" type="Button" parent="Panel/VBoxContainer"]
+text = "Strength 타격"
+
+[node name="Cancel" type="Button" parent="Panel/VBoxContainer"]
+text = "취소"

@@ -48,3 +48,16 @@ func end_turn() -> void:
 
 func current_unit() -> Unit:
 	return _units[_index]
+
+
+func remove_unit(unit: Unit) -> void:
+	var idx := _units.find(unit)
+	if idx == -1:
+		return
+	_units.remove_at(idx)
+	if idx < _index:
+		_index -= 1
+
+
+func get_all_units() -> Array[Unit]:
+	return _units

@@ -10,12 +10,16 @@ const UNIT_SCENE := preload("res://scenes/battle/unit.tscn")
 @onready var _floor: Node2D = $WorldContainer/FloorLayer
 @onready var _actors: Node2D = $WorldContainer/ActorsLayer
 @onready var _turn_manager: TurnManager = $TurnManager
+@onready var _attack_menu: CanvasLayer = $AttackMenu
 
 var _astar := AStar2D.new()
 var _protagonist: Unit
 var _enemy: Unit
-var _player_can_act: bool = false
+var _unit_at: Dictionary = {}   # Vector2i -> Unit
 var _hover_tile: Polygon2D
+var _player_can_act: bool = false
+var _pending_target: Unit = null
+var _battle_over: bool = false
 
 
 func _ready() -> void:
@@ -25,6 +29,9 @@ func _ready() -> void:
 	_place_protagonist()
 	_place_enemy()
 	_turn_manager.turn_started.connect(_on_turn_started)
+	_attack_menu.armor_chosen.connect(_on_attack_armor)
+	_attack_menu.strength_chosen.connect(_on_attack_strength)
+	_attack_menu.cancelled.connect(_on_attack_cancel)
 	_turn_manager.start_battle([_protagonist, _enemy])
 
 
@@ -38,11 +45,17 @@ func _process(_delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if not _player_can_act:
+	if _battle_over or not _player_can_act:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		var cell := screen_to_grid(get_global_mouse_position())
-		if _is_valid_cell(cell) and cell != Vector2i(_protagonist.grid_col, _protagonist.grid_row):
+		if _unit_at.has(cell) and not _unit_at[cell].is_player:
+			var target: Unit = _unit_at[cell]
+			if _is_adjacent(_protagonist, target):
+				_pending_target = target
+				_player_can_act = false
+				_attack_menu.show_menu()
+		elif _is_valid_cell(cell) and not _unit_at.has(cell):
 			_do_player_move(cell)
 
 
@@ -53,27 +66,99 @@ func _on_turn_started(unit: Unit) -> void:
 		_run_enemy_turn(unit)
 
 
+func _on_attack_armor() -> void:
+	_execute_player_attack(true)
+
+
+func _on_attack_strength() -> void:
+	_execute_player_attack(false)
+
+
+func _on_attack_cancel() -> void:
+	_player_can_act = true
+
+
+func _execute_player_attack(hit_armor: bool) -> void:
+	Combat.resolve_attack(_protagonist, _pending_target, hit_armor)
+	if _pending_target.stats.strength <= 0:
+		_kill_unit(_pending_target)
+		_check_battle_end()
+		if _battle_over:
+			return
+	_pending_target = null
+	_turn_manager.end_turn()
+
+
 func _do_player_move(cell: Vector2i) -> void:
 	_player_can_act = false
 	var path := _build_screen_path(_protagonist, cell)
 	if path.is_empty():
 		_player_can_act = true
 		return
-	_protagonist.grid_col = cell.x
-	_protagonist.grid_row = cell.y
+	_move_unit(_protagonist, cell)
 	await _protagonist.move_along_path(path)
 	_turn_manager.end_turn()
 
 
 func _run_enemy_turn(unit: Unit) -> void:
 	await get_tree().create_timer(0.5).timeout
-	var target := _pick_adjacent_cell(unit)
-	if target != Vector2i(unit.grid_col, unit.grid_row):
-		var path := _build_screen_path(unit, target)
-		unit.grid_col = target.x
-		unit.grid_row = target.y
-		await unit.move_along_path(path)
+	var target := _find_adjacent_player(unit)
+	if target:
+		var hit_armor := randi() % 2 == 0
+		Combat.resolve_attack(unit, target, hit_armor)
+		if target.stats.strength <= 0:
+			_kill_unit(target)
+			_check_battle_end()
+			if _battle_over:
+				return
+	else:
+		var cell := _pick_adjacent_cell(unit)
+		if cell != Vector2i(unit.grid_col, unit.grid_row):
+			var path := _build_screen_path(unit, cell)
+			_move_unit(unit, cell)
+			await unit.move_along_path(path)
 	_turn_manager.end_turn()
+
+
+func _move_unit(unit: Unit, cell: Vector2i) -> void:
+	_unit_at.erase(Vector2i(unit.grid_col, unit.grid_row))
+	unit.grid_col = cell.x
+	unit.grid_row = cell.y
+	_unit_at[cell] = unit
+
+
+func _kill_unit(unit: Unit) -> void:
+	_unit_at.erase(Vector2i(unit.grid_col, unit.grid_row))
+	_turn_manager.remove_unit(unit)
+	unit.queue_free()
+
+
+func _check_battle_end() -> void:
+	var has_player := false
+	var has_enemy := false
+	for u in _turn_manager.get_all_units():
+		if u.is_player:
+			has_player = true
+		else:
+			has_enemy = true
+	if not has_enemy:
+		_battle_over = true
+		print("VICTORY")
+	elif not has_player:
+		_battle_over = true
+		print("DEFEAT")
+
+
+func _is_adjacent(a: Unit, b: Unit) -> bool:
+	return abs(a.grid_col - b.grid_col) + abs(a.grid_row - b.grid_row) == 1
+
+
+func _find_adjacent_player(unit: Unit) -> Unit:
+	for dir in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var cell := Vector2i(unit.grid_col + dir.x, unit.grid_row + dir.y)
+		if _unit_at.has(cell) and _unit_at[cell].is_player:
+			return _unit_at[cell]
+	return null
 
 
 func _pick_adjacent_cell(unit: Unit) -> Vector2i:
@@ -81,7 +166,7 @@ func _pick_adjacent_cell(unit: Unit) -> Vector2i:
 	dirs.shuffle()
 	for dir in dirs:
 		var candidate := Vector2i(unit.grid_col + dir.x, unit.grid_row + dir.y)
-		if _is_valid_cell(candidate):
+		if _is_valid_cell(candidate) and not _unit_at.has(candidate):
 			return candidate
 	return Vector2i(unit.grid_col, unit.grid_row)
 
@@ -167,19 +252,21 @@ func _setup_pathfinding() -> void:
 func _place_protagonist() -> void:
 	_protagonist = UNIT_SCENE.instantiate()
 	_protagonist.is_player = true
-	_protagonist.stats = load("res://data/protagonist_stats.tres")
+	_protagonist.stats = load("res://data/protagonist_stats.tres").duplicate()
 	_protagonist.grid_col = 0
 	_protagonist.grid_row = 0
 	_protagonist.position = grid_to_screen(0, 0)
 	_actors.add_child(_protagonist)
+	_unit_at[Vector2i(0, 0)] = _protagonist
 
 
 func _place_enemy() -> void:
 	_enemy = UNIT_SCENE.instantiate()
 	_enemy.is_player = false
-	_enemy.stats = load("res://data/enemy_grunt_stats.tres")
+	_enemy.stats = load("res://data/enemy_grunt_stats.tres").duplicate()
 	_enemy.grid_col = 7
 	_enemy.grid_row = 7
 	_enemy.position = grid_to_screen(7, 7)
 	_enemy.modulate = Color(1.0, 0.3, 0.3)
 	_actors.add_child(_enemy)
+	_unit_at[Vector2i(7, 7)] = _enemy
