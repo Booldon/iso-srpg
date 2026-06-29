@@ -9,4 +9,8 @@ script = ExtResource("1_grid01")
 position = Vector2(0, 112)
 
 [node name="WorldContainer" type="Node2D" parent="."]
+
+[node name="FloorLayer" type="Node2D" parent="WorldContainer"]
+
+[node name="ActorsLayer" type="Node2D" parent="WorldContainer"]
 y_sort_enabled = true
