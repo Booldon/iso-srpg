@@ -3,6 +3,7 @@ class_name Unit
 
 signal movement_finished
 
+var is_player: bool = true
 var grid_col: int = 0
 var grid_row: int = 0
 var is_moving: bool = false
