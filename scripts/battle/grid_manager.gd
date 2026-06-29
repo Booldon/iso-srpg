@@ -13,8 +13,8 @@ const UNIT_SCENE := preload("res://scenes/battle/unit.tscn")
 @onready var _attack_menu: CanvasLayer = $AttackMenu
 
 var _astar := AStar2D.new()
-var _protagonist: Unit
-var _enemy: Unit
+var _players: Array[Unit] = []
+var _enemies: Array[Unit] = []
 var _unit_at: Dictionary = {}   # Vector2i -> Unit
 var _hover_tile: Polygon2D
 var _player_can_act: bool = false
@@ -26,13 +26,16 @@ func _ready() -> void:
 	_build_grid()
 	_setup_hover_tile()
 	_setup_pathfinding()
-	_place_protagonist()
-	_place_enemy()
+	_place_players()
+	_place_enemies()
 	_turn_manager.turn_started.connect(_on_turn_started)
 	_attack_menu.armor_chosen.connect(_on_attack_armor)
 	_attack_menu.strength_chosen.connect(_on_attack_strength)
 	_attack_menu.cancelled.connect(_on_attack_cancel)
-	_turn_manager.start_battle([_protagonist, _enemy])
+	var all_units: Array[Unit] = []
+	all_units.append_array(_players)
+	all_units.append_array(_enemies)
+	_turn_manager.start_battle(all_units)
 
 
 func _process(_delta: float) -> void:
@@ -48,15 +51,16 @@ func _input(event: InputEvent) -> void:
 	if _battle_over or not _player_can_act:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var active := _turn_manager.current_unit()
 		var cell := screen_to_grid(get_global_mouse_position())
 		if _unit_at.has(cell) and not _unit_at[cell].is_player:
 			var target: Unit = _unit_at[cell]
-			if _is_adjacent(_protagonist, target):
+			if _is_adjacent(active, target):
 				_pending_target = target
 				_player_can_act = false
 				_attack_menu.show_menu()
 		elif _is_valid_cell(cell) and not _unit_at.has(cell):
-			_do_player_move(cell)
+			_do_player_move(active, cell)
 
 
 func _on_turn_started(unit: Unit) -> void:
@@ -79,7 +83,8 @@ func _on_attack_cancel() -> void:
 
 
 func _execute_player_attack(hit_armor: bool) -> void:
-	Combat.resolve_attack(_protagonist, _pending_target, hit_armor)
+	var attacker := _turn_manager.current_unit()
+	Combat.resolve_attack(attacker, _pending_target, hit_armor)
 	if _pending_target.stats.strength <= 0:
 		_kill_unit(_pending_target)
 		_check_battle_end()
@@ -89,14 +94,14 @@ func _execute_player_attack(hit_armor: bool) -> void:
 	_turn_manager.end_turn()
 
 
-func _do_player_move(cell: Vector2i) -> void:
+func _do_player_move(unit: Unit, cell: Vector2i) -> void:
 	_player_can_act = false
-	var path := _build_screen_path(_protagonist, cell)
+	var path := _build_screen_path(unit, cell)
 	if path.is_empty():
 		_player_can_act = true
 		return
-	_move_unit(_protagonist, cell)
-	await _protagonist.move_along_path(path)
+	_move_unit(unit, cell)
+	await unit.move_along_path(path)
 	_turn_manager.end_turn()
 
 
@@ -249,24 +254,39 @@ func _setup_pathfinding() -> void:
 				_astar.connect_points(_cell_id(col, row), _cell_id(col, row + 1))
 
 
-func _place_protagonist() -> void:
-	_protagonist = UNIT_SCENE.instantiate()
-	_protagonist.is_player = true
-	_protagonist.stats = load("res://data/protagonist_stats.tres").duplicate()
-	_protagonist.grid_col = 0
-	_protagonist.grid_row = 0
-	_protagonist.position = grid_to_screen(0, 0)
-	_actors.add_child(_protagonist)
-	_unit_at[Vector2i(0, 0)] = _protagonist
+func _place_players() -> void:
+	var placements: Array = [
+		[Vector2i(0, 0), "protagonist_stats.tres", Color.WHITE],
+		[Vector2i(0, 2), "ally1_stats.tres",       Color(0.7, 0.9, 1.0)],
+		[Vector2i(0, 4), "ally2_stats.tres",       Color(0.9, 0.7, 1.0)],
+	]
+	for p in placements:
+		var unit := UNIT_SCENE.instantiate()
+		unit.is_player = true
+		unit.stats = load("res://data/" + p[1]).duplicate()
+		unit.grid_col = p[0].x
+		unit.grid_row = p[0].y
+		unit.position = grid_to_screen(p[0].x, p[0].y)
+		unit.modulate = p[2]
+		_actors.add_child(unit)
+		_unit_at[p[0]] = unit
+		_players.append(unit)
 
 
-func _place_enemy() -> void:
-	_enemy = UNIT_SCENE.instantiate()
-	_enemy.is_player = false
-	_enemy.stats = load("res://data/enemy_grunt_stats.tres").duplicate()
-	_enemy.grid_col = 7
-	_enemy.grid_row = 7
-	_enemy.position = grid_to_screen(7, 7)
-	_enemy.modulate = Color(1.0, 0.3, 0.3)
-	_actors.add_child(_enemy)
-	_unit_at[Vector2i(7, 7)] = _enemy
+func _place_enemies() -> void:
+	var placements: Array = [
+		[Vector2i(7, 7), "enemy_grunt_stats.tres"],
+		[Vector2i(7, 5), "enemy_fast_stats.tres"],
+		[Vector2i(7, 3), "enemy_tank_stats.tres"],
+	]
+	for p in placements:
+		var unit := UNIT_SCENE.instantiate()
+		unit.is_player = false
+		unit.stats = load("res://data/" + p[1]).duplicate()
+		unit.grid_col = p[0].x
+		unit.grid_row = p[0].y
+		unit.position = grid_to_screen(p[0].x, p[0].y)
+		unit.modulate = Color(1.0, 0.3, 0.3)
+		_actors.add_child(unit)
+		_unit_at[p[0]] = unit
+		_enemies.append(unit)
