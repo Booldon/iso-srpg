@@ -1,0 +1,13 @@
+# Godot-specific
+.godot/
+*.uid
+
+# Export presets (may contain sensitive paths)
+export_presets.cfg
+
+# Runtime saves
+saves/
+
+# OS
+.DS_Store
+Thumbs.db
