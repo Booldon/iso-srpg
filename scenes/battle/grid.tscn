@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3 uid="uid://b5x1y2z3w4v5u6"]
+[gd_scene load_steps=6 format=3 uid="uid://b5x1y2z3w4v5u6"]
 
 [ext_resource type="Script" path="res://scripts/battle/grid_manager.gd" id="1_grid01"]
 [ext_resource type="Script" path="res://scripts/battle/turn_manager.gd" id="2_tm01"]
 [ext_resource type="PackedScene" path="res://scenes/battle/attack_menu.tscn" id="3_am01"]
 [ext_resource type="PackedScene" path="res://scenes/battle/stats_panel.tscn" id="4_sp01"]
+[ext_resource type="PackedScene" path="res://scenes/battle/result_screen.tscn" id="5_rs01"]
 
 [node name="GridRoot" type="Node2D"]
 script = ExtResource("1_grid01")
@@ -24,3 +25,5 @@ script = ExtResource("2_tm01")
 [node name="AttackMenu" parent="." instance=ExtResource("3_am01")]
 
 [node name="StatsPanel" parent="." instance=ExtResource("4_sp01")]
+
+[node name="ResultScreen" parent="." instance=ExtResource("5_rs01")]

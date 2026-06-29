@@ -11,6 +11,8 @@ const UNIT_SCENE := preload("res://scenes/battle/unit.tscn")
 @onready var _actors: Node2D = $WorldContainer/ActorsLayer
 @onready var _turn_manager: TurnManager = $TurnManager
 @onready var _attack_menu: CanvasLayer = $AttackMenu
+@onready var _stats_panel: CanvasLayer = $StatsPanel
+@onready var _result_screen: CanvasLayer = $ResultScreen
 
 var _astar := AStar2D.new()
 var _players: Array[Unit] = []
@@ -52,6 +54,8 @@ func _process(_delta: float) -> void:
 	if not _battle_over and not _turn_manager.get_all_units().is_empty():
 		_active_tile.visible = true
 		_active_tile.position = _turn_manager.current_unit().position
+		var hovered := _unit_at.get(cell) as Unit
+		_stats_panel.show_unit(hovered if hovered else _turn_manager.current_unit())
 	else:
 		_active_tile.visible = false
 
@@ -157,10 +161,10 @@ func _check_battle_end() -> void:
 			has_enemy = true
 	if not has_enemy:
 		_battle_over = true
-		print("VICTORY")
+		_result_screen.show_victory()
 	elif not has_player:
 		_battle_over = true
-		print("DEFEAT")
+		_result_screen.show_defeat()
 
 
 func _is_adjacent(a: Unit, b: Unit) -> bool:
