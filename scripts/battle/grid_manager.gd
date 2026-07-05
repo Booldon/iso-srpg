@@ -108,6 +108,7 @@ func _on_attack_cancel() -> void:
 func _execute_player_attack(hit_armor: bool) -> void:
 	_clear_move_range()
 	var attacker := _turn_manager.current_unit()
+	attacker.face_toward_pos(_pending_target.position)
 	Combat.resolve_attack(attacker, _pending_target, hit_armor)
 	if _pending_target.stats.strength <= 0:
 		_kill_unit(_pending_target)
@@ -141,6 +142,7 @@ func _run_enemy_turn(unit: Unit) -> void:
 			hit_armor = false  # can deal real damage — hit Strength
 		else:
 			hit_armor = not target.stats.armor_reduction_immune  # hit Armor only if target is not immune
+		unit.face_toward_pos(target.position)
 		Combat.resolve_attack(unit, target, hit_armor)
 		if target.stats.strength <= 0:
 			_kill_unit(target)

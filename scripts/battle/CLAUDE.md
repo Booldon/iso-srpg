@@ -6,7 +6,7 @@
 |---|---|
 | `grid_manager.gd` | 씬 루트 스크립트. 그리드 생성·경로탐색·입력 처리·유닛 배치·승패 판정 총괄 |
 | `turn_manager.gd` | 턴 순서 관리. 팀별 speed 정렬 후 페어 인터리빙, `turn_started` 시그널 발행 |
-| `unit.gd` | 유닛 컴포넌트. 런타임 상태(`is_player`, `stats`, `grid_col/row`, `is_moving`) 보유. `move_along_path()` 로 셀 단위 트윈 이동 |
+| `unit.gd` | 유닛 컴포넌트. 런타임 상태(`is_player`, `stats`, `grid_col/row`, `is_moving`) 보유. `move_along_path()` 로 셀 단위 트윈 이동. `face_toward_pos(target_pos)` 로 이동·공격 시 8방향 스프라이트 전환 |
 | `combat.gd` | 순수 데미지 계산. `Combat.resolve_attack(attacker, target, hit_armor)` 로 stats 직접 수정 |
 | `attack_menu.gd` | CanvasLayer UI. `armor_chosen` / `strength_chosen` / `cancelled` 시그널 발행 |
 | `stats_panel.gd` | CanvasLayer UI. `show_unit(unit)` 로 STR/ARM/SPD 표시. 마우스 오버 유닛 우선 |

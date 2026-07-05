@@ -3,6 +3,17 @@ class_name Unit
 
 signal movement_finished
 
+const TEX_N  := preload("res://assets/characters/protagonist/north.png")
+const TEX_NE := preload("res://assets/characters/protagonist/north-east.png")
+const TEX_E  := preload("res://assets/characters/protagonist/east.png")
+const TEX_SE := preload("res://assets/characters/protagonist/south-east.png")
+const TEX_S  := preload("res://assets/characters/protagonist/south.png")
+const TEX_SW := preload("res://assets/characters/protagonist/south-west.png")
+const TEX_W  := preload("res://assets/characters/protagonist/west.png")
+const TEX_NW := preload("res://assets/characters/protagonist/north-west.png")
+
+@onready var _sprite: Sprite2D = $Sprite2D
+
 var is_player: bool = true
 var stats: UnitStats = null
 var grid_col: int = 0
@@ -10,9 +21,36 @@ var grid_row: int = 0
 var is_moving: bool = false
 
 
+func _ready() -> void:
+	# Players face south-east (toward enemy side); enemies face north-west
+	_sprite.texture = TEX_SE if is_player else TEX_NW
+
+
+func face_toward_pos(target_pos: Vector2) -> void:
+	var delta := target_pos - position
+	var sx := 0
+	var sy := 0
+	if absf(delta.x) > 0.5:
+		sx = 1 if delta.x > 0.0 else -1
+	if absf(delta.y) > 0.5:
+		sy = 1 if delta.y > 0.0 else -1
+	if sx == 0 and sy == 0:
+		return
+	match Vector2i(sx, sy):
+		Vector2i( 1, -1): _sprite.texture = TEX_NE
+		Vector2i( 1,  0): _sprite.texture = TEX_E
+		Vector2i( 1,  1): _sprite.texture = TEX_SE
+		Vector2i( 0,  1): _sprite.texture = TEX_S
+		Vector2i(-1,  1): _sprite.texture = TEX_SW
+		Vector2i(-1,  0): _sprite.texture = TEX_W
+		Vector2i(-1, -1): _sprite.texture = TEX_NW
+		Vector2i( 0, -1): _sprite.texture = TEX_N
+
+
 func move_along_path(screen_path: Array[Vector2]) -> void:
 	is_moving = true
 	for target_pos in screen_path:
+		face_toward_pos(target_pos)
 		var tween := create_tween()
 		tween.tween_property(self, "position", target_pos, 0.15)
 		await tween.finished
