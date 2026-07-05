@@ -56,6 +56,8 @@ This is a unique trait, not a general system — do not generalize it prematurel
 - No C# scripts — GDScript only
 - No hardcoded stat numbers in `.gd` files
 - No singletons/autoloads for game state before the architecture warrants it
+  **Exception (step 5+):** `GameState` autoload (`scripts/autoload/game_state.gd`) is approved
+  for cross-scene party persistence. One autoload maximum until further review.
 - No placeholder "TODO: add real logic" stubs committed to main
 - No full-game scaffolding in one pass
 

@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="PartyRoster" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/party_roster.gd" id="1_pr"]
+[ext_resource type="Resource" uid="uid://b2dnk5ak0iyy" path="res://data/protagonist_stats.tres" id="2_prot"]
+[ext_resource type="Resource" uid="uid://du6bmpgcomaii" path="res://data/ally1_stats.tres" id="3_a1"]
+[ext_resource type="Resource" uid="uid://du6cmpgcomaii" path="res://data/ally2_stats.tres" id="4_a2"]
+
+[resource]
+script = ExtResource("1_pr")
+members = Array[Resource]([ExtResource("2_prot"), ExtResource("3_a1"), ExtResource("4_a2")])

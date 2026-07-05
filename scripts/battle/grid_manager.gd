@@ -191,6 +191,11 @@ func _check_battle_end() -> void:
 			has_enemy = true
 	if not has_enemy:
 		_battle_over = true
+		var survivors: Array[String] = []
+		for u in _turn_manager.get_all_units():
+			if u.is_player:
+				survivors.append(u.roster_path)
+		GameState.apply_survivors(survivors)
 		_result_screen.show_victory()
 	elif not has_player:
 		_battle_over = true
@@ -394,21 +399,25 @@ func _setup_pathfinding() -> void:
 
 
 func _place_players() -> void:
-	var placements: Array = [
-		[Vector2i(0, 0), "protagonist_stats.tres", Color.WHITE],
-		[Vector2i(0, 2), "ally1_stats.tres",       Color(0.7, 0.9, 1.0)],
-		[Vector2i(0, 4), "ally2_stats.tres",       Color(0.9, 0.7, 1.0)],
+	var slots: Array = [
+		[Vector2i(0, 0), Color.WHITE],
+		[Vector2i(0, 2), Color(0.7, 0.9, 1.0)],
+		[Vector2i(0, 4), Color(0.9, 0.7, 1.0)],
 	]
-	for p in placements:
+	var living := GameState.get_living_party()
+	for i in range(living.size()):
+		var rec: Dictionary = living[i]
+		var cell: Vector2i = slots[i][0]
 		var unit := UNIT_SCENE.instantiate()
 		unit.is_player = true
-		unit.stats = load("res://data/" + p[1]).duplicate()
-		unit.grid_col = p[0].x
-		unit.grid_row = p[0].y
-		unit.position = grid_to_screen(p[0].x, p[0].y)
-		unit.modulate = p[2]
+		unit.stats = load(rec["path"]).duplicate()
+		unit.roster_path = rec["path"]
+		unit.grid_col = cell.x
+		unit.grid_row = cell.y
+		unit.position = grid_to_screen(cell.x, cell.y)
+		unit.modulate = slots[i][1]
 		_actors.add_child(unit)
-		_unit_at[p[0]] = unit
+		_unit_at[cell] = unit
 		_players.append(unit)
 
 

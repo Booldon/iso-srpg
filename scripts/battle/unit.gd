@@ -19,6 +19,7 @@ var stats: UnitStats = null
 var grid_col: int = 0
 var grid_row: int = 0
 var is_moving: bool = false
+var roster_path: String = ""
 
 
 func _ready() -> void:
