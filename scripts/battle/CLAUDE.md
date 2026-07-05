@@ -29,10 +29,10 @@ GridRoot (Node2D, grid_manager.gd)
 ## 턴 흐름
 
 1. `TurnManager.start_battle(units)` — 팀별 speed 정렬 → 페어 구성 → `turn_started` 발행
-2. **플레이어 턴**: `_player_can_act = true`, 이동 범위 표시
+2. **플레이어 턴**: 소프트락 가드(이동·공격 모두 불가면 자동 `end_turn`), 통과 시 `_player_can_act = true` + 이동 범위 표시
    - 범위 내 빈 칸 클릭 → 이동 → `end_turn()`
    - 인접 적 클릭 → 공격 메뉴 → 데미지 → 사망 체크 → `end_turn()`
-3. **적 턴**: 0.5초 대기 → 인접 시 랜덤 공격, 아니면 랜덤 이동 → `end_turn()`
+3. **적 턴**: 0.5초 대기 → 인접 시 스마트 타겟 공격(실데미지 우선, 면역 armor 회피), 아니면 최근접 플레이어 방향으로 접근 이동 → `end_turn()`
 
 ## 핵심 불변 조건
 
@@ -40,6 +40,8 @@ GridRoot (Node2D, grid_manager.gd)
 - 유닛 생성 시 `.tres`를 `.duplicate()` — 각 유닛이 독립적인 Resource 사본 보유
 - `_player_can_act` — 적 턴·이동 중 입력 차단의 유일한 게이트
 - FloorLayer 렌더 순서: `grid tiles < range tiles < active tile < hover tile` — 범위 갱신 후 `move_child`로 강제 유지
+- A* disabled 플래그는 `_build_screen_path()` 호출 시마다 `_sync_astar_occupancy(mover)`로 `_unit_at`과 동기화됨 — 다른 유닛을 우회
+- 이동범위 표시·판정의 단일 진실은 `_compute_reachable(unit)` BFS 결과(`_reachable` 캐시). 맨해튼 거리로 직접 계산하지 않음
 
 ## 데이터 파일 (data/)
 

@@ -25,6 +25,7 @@ var _player_can_act: bool = false
 var _pending_target: Unit = null
 var _battle_over: bool = false
 var _range_tiles: Array[Polygon2D] = []
+var _reachable: Dictionary = {}  # Vector2i -> step count; cached by _show_move_range
 
 
 func _ready() -> void:
@@ -79,6 +80,11 @@ func _input(event: InputEvent) -> void:
 
 func _on_turn_started(unit: Unit) -> void:
 	if unit.is_player:
+		# Soft-lock guard: if the unit can neither move nor attack, skip its turn automatically
+		var reachable := _compute_reachable(unit)
+		if reachable.is_empty() and _find_adjacent_enemy(unit) == null:
+			_turn_manager.end_turn()
+			return
 		_player_can_act = true
 		_show_move_range(unit)
 	else:
@@ -128,7 +134,13 @@ func _run_enemy_turn(unit: Unit) -> void:
 	await get_tree().create_timer(0.5).timeout
 	var target := _find_adjacent_player(unit)
 	if target:
-		var hit_armor := randi() % 2 == 0
+		# Smart attack: prefer real damage; avoid wasting attack on immune armor
+		var dmg := maxi(0, unit.stats.strength - target.stats.armor)
+		var hit_armor: bool
+		if dmg > 0:
+			hit_armor = false  # can deal real damage — hit Strength
+		else:
+			hit_armor = not target.stats.armor_reduction_immune  # hit Armor only if target is not immune
 		Combat.resolve_attack(unit, target, hit_armor)
 		if target.stats.strength <= 0:
 			_kill_unit(target)
@@ -136,11 +148,21 @@ func _run_enemy_turn(unit: Unit) -> void:
 			if _battle_over:
 				return
 	else:
-		var cell := _pick_adjacent_cell(unit)
-		if cell != Vector2i(unit.grid_col, unit.grid_row):
-			var path := _build_screen_path(unit, cell)
-			_move_unit(unit, cell)
-			await unit.move_along_path(path)
+		# Approach the nearest living player unit
+		var nearest := _find_nearest_player(unit)
+		if nearest:
+			var reachable := _compute_reachable(unit)
+			var best_cell := Vector2i(unit.grid_col, unit.grid_row)
+			var best_dist := absi(nearest.grid_col - unit.grid_col) + absi(nearest.grid_row - unit.grid_row)
+			for cell: Vector2i in reachable.keys():
+				var d := absi(nearest.grid_col - cell.x) + absi(nearest.grid_row - cell.y)
+				if d < best_dist:
+					best_dist = d
+					best_cell = cell
+			if best_cell != Vector2i(unit.grid_col, unit.grid_row):
+				var path := _build_screen_path(unit, best_cell)
+				_move_unit(unit, best_cell)
+				await unit.move_along_path(path)
 	_turn_manager.end_turn()
 
 
@@ -173,9 +195,45 @@ func _check_battle_end() -> void:
 		_result_screen.show_defeat()
 
 
-func _is_in_move_range(unit: Unit, cell: Vector2i) -> bool:
-	var dist: int = absi(cell.x - unit.grid_col) + absi(cell.y - unit.grid_row)
-	return dist <= unit.stats.move_range
+# BFS: returns {Vector2i: steps} for all cells reachable within move_range,
+# routing around occupied cells. The unit's own start cell is excluded from the result.
+func _compute_reachable(unit: Unit) -> Dictionary:
+	var result: Dictionary = {}
+	var queue: Array = [{"cell": Vector2i(unit.grid_col, unit.grid_row), "steps": 0}]
+	var visited: Dictionary = {Vector2i(unit.grid_col, unit.grid_row): true}
+	var dirs: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	while not queue.is_empty():
+		var entry = queue.pop_front()
+		var cell: Vector2i = entry["cell"]
+		var steps: int = entry["steps"]
+		if steps > 0:
+			result[cell] = steps
+		if steps >= unit.stats.move_range:
+			continue
+		for dir in dirs:
+			var nxt := cell + dir
+			if not _is_valid_cell(nxt):
+				continue
+			if visited.has(nxt):
+				continue
+			if _unit_at.has(nxt) and _unit_at[nxt] != unit:
+				continue  # blocked by another unit
+			visited[nxt] = true
+			queue.append({"cell": nxt, "steps": steps + 1})
+	return result
+
+
+# Sync A* disabled flags so paths route around all units except the mover itself.
+func _sync_astar_occupancy(mover: Unit) -> void:
+	for row in range(GRID_ROWS):
+		for col in range(GRID_COLS):
+			var cell := Vector2i(col, row)
+			var id := _cell_id(col, row)
+			_astar.set_point_disabled(id, _unit_at.has(cell) and _unit_at[cell] != mover)
+
+
+func _is_in_move_range(_unit: Unit, cell: Vector2i) -> bool:
+	return _reachable.has(cell)
 
 
 func _is_adjacent(a: Unit, b: Unit) -> bool:
@@ -190,17 +248,29 @@ func _find_adjacent_player(unit: Unit) -> Unit:
 	return null
 
 
-func _pick_adjacent_cell(unit: Unit) -> Vector2i:
-	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
-	dirs.shuffle()
-	for dir in dirs:
-		var candidate := Vector2i(unit.grid_col + dir.x, unit.grid_row + dir.y)
-		if _is_valid_cell(candidate) and not _unit_at.has(candidate):
-			return candidate
-	return Vector2i(unit.grid_col, unit.grid_row)
+func _find_adjacent_enemy(unit: Unit) -> Unit:
+	for dir in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var cell := Vector2i(unit.grid_col + dir.x, unit.grid_row + dir.y)
+		if _unit_at.has(cell) and not _unit_at[cell].is_player:
+			return _unit_at[cell]
+	return null
+
+
+func _find_nearest_player(unit: Unit) -> Unit:
+	var nearest: Unit = null
+	var best_dist := GRID_COLS * GRID_ROWS + 1  # greater than any possible Manhattan distance on this grid
+	for u in _turn_manager.get_all_units():
+		if not u.is_player:
+			continue
+		var d := absi(u.grid_col - unit.grid_col) + absi(u.grid_row - unit.grid_row)
+		if d < best_dist:
+			best_dist = d
+			nearest = u
+	return nearest
 
 
 func _build_screen_path(unit: Unit, cell: Vector2i) -> Array[Vector2]:
+	_sync_astar_occupancy(unit)
 	var from_id := _cell_id(unit.grid_col, unit.grid_row)
 	var to_id := _cell_id(cell.x, cell.y)
 	var id_path := _astar.get_id_path(from_id, to_id)
@@ -236,23 +306,19 @@ func _is_valid_cell(cell: Vector2i) -> bool:
 
 func _show_move_range(unit: Unit) -> void:
 	_clear_move_range()
-	var range_val := unit.stats.move_range
-	for row in range(GRID_ROWS):
-		for col in range(GRID_COLS):
-			var cell := Vector2i(col, row)
-			var dist: int = absi(col - unit.grid_col) + absi(row - unit.grid_row)
-			if dist > 0 and dist <= range_val and not _unit_at.has(cell):
-				var tile := Polygon2D.new()
-				tile.polygon = PackedVector2Array([
-					Vector2(0, -TILE_HALF_H),
-					Vector2(TILE_HALF_W, 0),
-					Vector2(0, TILE_HALF_H),
-					Vector2(-TILE_HALF_W, 0),
-				])
-				tile.color = Color(0.2, 0.6, 1.0, 0.3)
-				tile.position = grid_to_screen(col, row)
-				_floor.add_child(tile)
-				_range_tiles.append(tile)
+	_reachable = _compute_reachable(unit)
+	for cell: Vector2i in _reachable.keys():
+		var tile := Polygon2D.new()
+		tile.polygon = PackedVector2Array([
+			Vector2(0, -TILE_HALF_H),
+			Vector2(TILE_HALF_W, 0),
+			Vector2(0, TILE_HALF_H),
+			Vector2(-TILE_HALF_W, 0),
+		])
+		tile.color = Color(0.2, 0.6, 1.0, 0.3)
+		tile.position = grid_to_screen(cell.x, cell.y)
+		_floor.add_child(tile)
+		_range_tiles.append(tile)
 	# Keep active and hover tiles rendered above range tiles
 	_floor.move_child(_active_tile, -1)
 	_floor.move_child(_hover_tile, -1)
@@ -262,6 +328,7 @@ func _clear_move_range() -> void:
 	for tile in _range_tiles:
 		tile.queue_free()
 	_range_tiles.clear()
+	_reachable.clear()
 
 
 func _setup_active_tile() -> void:

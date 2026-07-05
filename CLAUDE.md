@@ -68,8 +68,41 @@ This is a unique trait, not a general system — do not generalize it prematurel
 
 ## Git discipline
 - Commit on logical boundaries (feature works end-to-end, tree is clean)
-- Commit message format: `feat:`, `fix:`, `data:`, `art:`, `docs:`
 - A clean working tree = a safe checkpoint; do not leave half-broken state
+
+### Commit message format
+Subject: `type(step:N[/tag]): brief description`
+Types: `feat` `fix` `data` `art` `docs`
+
+Body (required for feat/fix, optional for data/art/docs):
+```
+was:  what the game could NOT do before this commit
+now:  what the game CAN do after this commit
+
+ref:  file.gd — key_function(), another_function()   ← only when multiple functions changed
+```
+
+**Rules:**
+- `was/now` captures the capability delta between steps — an AI reading git log can reconstruct game state from these lines alone
+- `ref:` is optional; add it when the commit touches several non-obvious entry points
+- Step number matches the build order (1–5); use a `/tag` suffix for sub-steps (`step:4/ux`, `step:4/fix`)
+- Body lines stay in English; keep `was`/`now` to one line each
+
+**Examples:**
+```
+feat(step:2): click-to-move with A* pathfinding
+
+was:  unit placed on grid, no interaction
+now:  click any cell → unit moves via shortest path; occupied cells blocked
+```
+```
+fix(step:4): occupancy-aware path, BFS range, engaging enemy AI
+
+was:  enemies wander; units clip through each other; range ignores obstacles
+now:  enemies advance toward party; paths route around units; range is BFS-accurate
+
+ref:  grid_manager.gd — _compute_reachable(), _sync_astar_occupancy(), _run_enemy_turn()
+```
 
 ## Project structure
 - `scenes/` — `.tscn` files (e.g. `scenes/battle/grid.tscn`)
