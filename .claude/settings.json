@@ -1,3 +1,16 @@
 {
-  "model": "opusplan"
+  "model": "opusplan",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/scripts/session_summary.py"
+          }
+        ]
+      }
+    ]
+  }
 }

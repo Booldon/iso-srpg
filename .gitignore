@@ -14,3 +14,4 @@ Thumbs.db
 
 # Claude Code — machine-specific permissions (do not commit)
 .claude/settings.local.json
+.claude/scripts/.last_summary_ts
