@@ -21,7 +21,7 @@ func _refresh_chapter_nodes() -> void:
 	var total := GameState.get_chapter_count()
 	for i in range(total):
 		var lbl := Label.new()
-		lbl.theme_override_font_sizes["font_size"] = 22
+		lbl.add_theme_font_size_override("font_size", 22)
 		if i < GameState.current_chapter:
 			lbl.text = " [Ch.%d ✓] " % (i + 1)
 			lbl.modulate = Color(0.4, 1.0, 0.4)
@@ -38,7 +38,7 @@ func _refresh_chapter_nodes() -> void:
 	if cd:
 		var title_lbl := Label.new()
 		title_lbl.text = cd.title
-		title_lbl.theme_override_font_sizes["font_size"] = 18
+		title_lbl.add_theme_font_size_override("font_size", 18)
 		title_lbl.modulate = Color(0.85, 0.85, 0.85)
 		title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_chapter_row.get_parent().add_child(title_lbl)
