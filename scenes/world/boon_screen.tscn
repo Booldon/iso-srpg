@@ -1,0 +1,29 @@
+[gd_scene format=3 uid="uid://cbboonscn001"]
+
+[ext_resource type="Script" path="res://scripts/world/boon_screen.gd" id="1_bs"]
+
+[node name="BoonScreen" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_bs")
+
+[node name="Background" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.05, 0.05, 0.09, 1)
+
+[node name="Header" type="Label" parent="."]
+anchor_right = 1.0
+offset_top = 60.0
+offset_bottom = 140.0
+text = "부운을 하나 선택하세요."
+theme_override_font_sizes/font_size = 28
+horizontal_alignment = 1
+
+[node name="Center" type="CenterContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 140.0
+
+[node name="Cards" type="HBoxContainer" parent="Center"]
+theme_override_constants/separation = 30
