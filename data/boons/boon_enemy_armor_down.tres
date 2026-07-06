@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="BoonData" format=3 uid="uid://cbenarm000001"]
+
+[ext_resource type="Script" uid="uid://cb4kwn2xtap5r" path="res://scripts/data/boon_data.gd" id="1_boon"]
+
+[resource]
+script = ExtResource("1_boon")
+id = "enemy_armor_down"
+title = "방어 분쇄"
+description = "적의 ARM -2\n적의 방어력이 낮아진다."
+target = 1
+stat = 1
+amount = 2

@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="Campaign" format=3 uid="uid://cbcampaign001"]
+
+[ext_resource type="Script" uid="uid://cdq9st6yuzc4m" path="res://scripts/data/campaign.gd" id="1_camp"]
+[ext_resource type="Resource" uid="uid://cbchap1x00001" path="res://data/chapters/chapter_1.tres" id="2_ch1"]
+[ext_resource type="Resource" uid="uid://cbchap2x00001" path="res://data/chapters/chapter_2.tres" id="3_ch2"]
+[ext_resource type="Resource" uid="uid://cbchap3x00001" path="res://data/chapters/chapter_3.tres" id="4_ch3"]
+
+[resource]
+script = ExtResource("1_camp")
+chapters = Array[Resource]([ExtResource("2_ch1"), ExtResource("3_ch2"), ExtResource("4_ch3")])
