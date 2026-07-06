@@ -196,9 +196,13 @@ func _check_battle_end() -> void:
 			if u.is_player:
 				survivors.append(u.roster_path)
 		GameState.apply_survivors(survivors)
-		_result_screen.show_victory()
+		if GameState.is_campaign_complete():
+			get_tree().change_scene_to_file("res://scenes/world/world_map.tscn")
+		else:
+			get_tree().change_scene_to_file("res://scenes/world/boon_screen.tscn")
 	elif not has_player:
 		_battle_over = true
+		GameState.start_new_run()
 		_result_screen.show_defeat()
 
 
@@ -411,6 +415,7 @@ func _place_players() -> void:
 		var unit := UNIT_SCENE.instantiate()
 		unit.is_player = true
 		unit.stats = load(rec["path"]).duplicate()
+		BoonApplier.apply_ally_boons(unit.stats, GameState.active_boons)
 		unit.roster_path = rec["path"]
 		unit.grid_col = cell.x
 		unit.grid_row = cell.y
@@ -422,19 +427,30 @@ func _place_players() -> void:
 
 
 func _place_enemies() -> void:
-	var placements: Array = [
-		[Vector2i(7, 7), "enemy_grunt_stats.tres"],
-		[Vector2i(7, 5), "enemy_fast_stats.tres"],
-		[Vector2i(7, 3), "enemy_tank_stats.tres"],
+	var slots: Array[Vector2i] = [
+		Vector2i(7, 7),
+		Vector2i(7, 5),
+		Vector2i(7, 3),
 	]
-	for p in placements:
+	var chapter := GameState.current_chapter_data()
+	if chapter == null:
+		push_error("GridManager: no chapter data for index %d" % GameState.current_chapter)
+		return
+	for i in range(chapter.enemy_party.size()):
+		if i >= slots.size():
+			break
+		var stats_res := chapter.enemy_party[i] as UnitStats
+		if stats_res == null:
+			continue
+		var cell := slots[i]
 		var unit := UNIT_SCENE.instantiate()
 		unit.is_player = false
-		unit.stats = load("res://data/" + p[1]).duplicate()
-		unit.grid_col = p[0].x
-		unit.grid_row = p[0].y
-		unit.position = grid_to_screen(p[0].x, p[0].y)
+		unit.stats = stats_res.duplicate()
+		BoonApplier.apply_enemy_boons(unit.stats, GameState.active_boons)
+		unit.grid_col = cell.x
+		unit.grid_row = cell.y
+		unit.position = grid_to_screen(cell.x, cell.y)
 		unit.modulate = Color(1.0, 0.3, 0.3)
 		_actors.add_child(unit)
-		_unit_at[p[0]] = unit
+		_unit_at[cell] = unit
 		_enemies.append(unit)
