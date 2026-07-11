@@ -9,8 +9,8 @@ const PICK_COUNT := 3
 
 
 func _ready() -> void:
-	var cd := GameState.current_chapter_data()
-	_header.text = "%s 클리어!\n부운을 하나 선택하세요." % (cd.title if cd else "챕터")
+	var sd := GameState.current_stage_data()
+	_header.text = "%s 클리어!\n부운을 하나 선택하세요." % (sd.title if sd else "스테이지")
 
 	var pool := _load_boon_pool()
 	pool.shuffle()
@@ -46,5 +46,5 @@ func _build_cards(picks: Array[String]) -> void:
 
 
 func _on_card_chosen(path: String) -> void:
-	GameState.advance_chapter(path)
+	GameState.advance_stage(path)
 	get_tree().change_scene_to_file(WORLD_MAP)

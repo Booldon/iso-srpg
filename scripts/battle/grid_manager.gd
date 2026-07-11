@@ -432,14 +432,14 @@ func _place_enemies() -> void:
 		Vector2i(7, 5),
 		Vector2i(7, 3),
 	]
-	var chapter := GameState.current_chapter_data()
-	if chapter == null:
-		push_error("GridManager: no chapter data for index %d" % GameState.current_chapter)
+	var stage := GameState.current_stage_data()
+	if stage == null:
+		push_error("GridManager: no stage data for index %d" % GameState.current_stage)
 		return
-	for i in range(chapter.enemy_party.size()):
+	for i in range(stage.enemy_party.size()):
 		if i >= slots.size():
 			break
-		var stats_res := chapter.enemy_party[i] as UnitStats
+		var stats_res := stage.enemy_party[i] as UnitStats
 		if stats_res == null:
 			continue
 		var cell := slots[i]

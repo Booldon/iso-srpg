@@ -4,7 +4,7 @@
 
 | 파일 | 역할 |
 |---|---|
-| `grid_manager.gd` | 씬 루트 스크립트. 그리드 생성·경로탐색·입력 처리·유닛 배치·승패 판정 총괄. `_place_players()`는 `GameState.get_living_party()` + `BoonApplier`로 소싱. `_place_enemies()`는 `GameState.current_chapter_data().enemy_party` 소싱 |
+| `grid_manager.gd` | 씬 루트 스크립트. 그리드 생성·경로탐색·입력 처리·유닛 배치·승패 판정 총괄. `_place_players()`는 `GameState.get_living_party()` + `BoonApplier`로 소싱. `_place_enemies()`는 `GameState.current_stage_data().enemy_party` 소싱 |
 | `turn_manager.gd` | 턴 순서 관리. 팀별 speed 정렬 후 페어 인터리빙, `turn_started` 시그널 발행 |
 | `unit.gd` | 유닛 컴포넌트. 런타임 상태(`is_player`, `stats`, `grid_col/row`, `is_moving`) 보유. `move_along_path()` 로 셀 단위 트윈 이동. `face_toward_pos(target_pos)` 로 이동·공격 시 8방향 스프라이트 전환 |
 | `combat.gd` | 순수 데미지 계산. `Combat.resolve_attack(attacker, target, hit_armor)` 로 stats 직접 수정 |

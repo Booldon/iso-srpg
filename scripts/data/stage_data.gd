@@ -1,5 +1,5 @@
 extends Resource
-class_name ChapterData
+class_name StageData
 
 @export var id: int = 1
 @export var title: String = ""

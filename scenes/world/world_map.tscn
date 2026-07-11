@@ -30,7 +30,7 @@ horizontal_alignment = 1
 
 [node name="HSep1" type="HSeparator" parent="Margin/VBox"]
 
-[node name="ChapterRow" type="HBoxContainer" parent="Margin/VBox"]
+[node name="StageRow" type="HBoxContainer" parent="Margin/VBox"]
 alignment = 1
 
 [node name="HSep2" type="HSeparator" parent="Margin/VBox"]

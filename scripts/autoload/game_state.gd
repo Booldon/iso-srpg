@@ -4,10 +4,10 @@ const DEFAULT_PARTY := preload("res://data/default_party.tres")
 const CAMPAIGN      := preload("res://data/campaign.tres")
 const SAVE_DIR      := "user://saves"
 const SAVE_PATH     := "user://saves/save.json"
-const SAVE_VERSION  := 2
+const SAVE_VERSION  := 3
 
 var party: Array[Dictionary] = []
-var current_chapter: int = 0           # index into CAMPAIGN.chapters
+var current_stage: int = 0             # index into CAMPAIGN.stages
 var active_boons: Array[String] = []   # .tres paths accumulated this run
 
 
@@ -32,18 +32,18 @@ func get_living_party() -> Array[Dictionary]:
 	return result
 
 
-func current_chapter_data() -> ChapterData:
-	if current_chapter < CAMPAIGN.chapters.size():
-		return CAMPAIGN.chapters[current_chapter] as ChapterData
+func current_stage_data() -> StageData:
+	if current_stage < CAMPAIGN.stages.size():
+		return CAMPAIGN.stages[current_stage] as StageData
 	return null
 
 
 func is_campaign_complete() -> bool:
-	return current_chapter >= CAMPAIGN.chapters.size()
+	return current_stage >= CAMPAIGN.stages.size()
 
 
-func get_chapter_count() -> int:
-	return CAMPAIGN.chapters.size()
+func get_stage_count() -> int:
+	return CAMPAIGN.stages.size()
 
 
 # ── Mutations ──────────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ func new_game() -> void:
 		var stats := m as UnitStats
 		if stats:
 			party.append({"path": stats.resource_path, "alive": true})
-	current_chapter = 0
+	current_stage = 0
 	active_boons.clear()
 
 
@@ -70,10 +70,10 @@ func apply_survivors(surviving_paths: Array[String]) -> void:
 	save_game()
 
 
-# Called after boon selection: append boon, advance chapter, save.
-func advance_chapter(boon_path: String) -> void:
+# Called after boon selection: append boon, advance stage, save.
+func advance_stage(boon_path: String) -> void:
 	active_boons.append(boon_path)
-	current_chapter += 1
+	current_stage += 1
 	save_game()
 
 
@@ -84,7 +84,7 @@ func save_game() -> void:
 	var data := {
 		"version": SAVE_VERSION,
 		"party": party,
-		"current_chapter": current_chapter,
+		"current_stage": current_stage,
 		"active_boons": active_boons,
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -104,7 +104,7 @@ func load_game() -> void:
 	party.clear()
 	for rec in parsed["party"]:
 		party.append({"path": rec["path"], "alive": rec["alive"]})
-	current_chapter = int(parsed.get("current_chapter", 0))
+	current_stage = int(parsed.get("current_stage", 0))
 	active_boons.clear()
 	for b in parsed.get("active_boons", []):
 		active_boons.append(str(b))

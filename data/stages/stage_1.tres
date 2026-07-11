@@ -1,6 +1,6 @@
-[gd_resource type="Resource" script_class="ChapterData" format=3 uid="uid://cbchap1x00001"]
+[gd_resource type="Resource" script_class="StageData" format=3 uid="uid://cbchap1x00001"]
 
-[ext_resource type="Script" uid="uid://cp8rs5xtybv3l" path="res://scripts/data/chapter_data.gd" id="1_cd"]
+[ext_resource type="Script" uid="uid://cp8rs5xtybv3l" path="res://scripts/data/stage_data.gd" id="1_cd"]
 [ext_resource type="Resource" uid="uid://cwgr8xvkpmxaa" path="res://data/enemy_grunt_stats.tres" id="2_g"]
 [ext_resource type="Resource" uid="uid://ryreddkas5aa" path="res://data/enemy_fast_stats.tres" id="3_f"]
 [ext_resource type="Resource" uid="uid://ryrerde0s5aa" path="res://data/enemy_tank_stats.tres" id="4_t"]
@@ -8,5 +8,5 @@
 [resource]
 script = ExtResource("1_cd")
 id = 1
-title = "제1장: 첫 번째 전투"
+title = "스테이지 1: 첫 번째 전투"
 enemy_party = Array[Resource]([ExtResource("2_g"), ExtResource("3_f"), ExtResource("4_t")])

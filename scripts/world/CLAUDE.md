@@ -5,8 +5,8 @@
 | 파일 | 역할 |
 |---|---|
 | `title.gd` | 타이틀 스크린. 새 게임/이어하기 → world_map.tscn 전환 |
-| `world_map.gd` | 월드맵. 선형 챕터 체인 표시, 파티 현황, 전투 진입 버튼 |
-| `boon_screen.gd` | 부운 선택. data/boons/ 풀에서 3장 랜덤 추첨 → advance_chapter() |
+| `world_map.gd` | 월드맵. 선형 스테이지 체인 표시, 파티 현황, 전투 진입 버튼 |
+| `boon_screen.gd` | 부운 선택. data/boons/ 풀에서 3장 랜덤 추첨 → advance_stage() |
 
 ## 씬 흐름
 
@@ -28,11 +28,11 @@ title.tscn ──(새 게임/이어하기)──► world_map.tscn ──(전투
 `DirAccess.open("res://data/boons/")` 로 `.tres` 파일을 동적 스캔.
 새 부운 추가 = 파일만 넣으면 자동으로 풀에 포함; 코드 수정 불필요.
 
-## 월드맵 챕터 노드 표시
+## 월드맵 스테이지 노드 표시
 
-`world_map.gd._refresh_chapter_nodes()` 가 `GameState.get_chapter_count()` 순회:
-- `i < current_chapter` → ✓ (초록)
-- `i == current_chapter` → ◀ (노랑, 현재 진입 가능)
-- `i > current_chapter` → 잠김 (회색)
+`world_map.gd._refresh_stage_nodes()` 가 `GameState.get_stage_count()` 순회:
+- `i < current_stage` → ✓ (초록)
+- `i == current_stage` → ◀ (노랑, 현재 진입 가능)
+- `i > current_stage` → 잠김 (회색)
 
 `_refresh_party_label()`은 생존 인원 + 획득 부운 수를 표시.

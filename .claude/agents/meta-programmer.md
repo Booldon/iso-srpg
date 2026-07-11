@@ -27,15 +27,15 @@ You are the **Meta & Progression Programmer** sub-agent for iso-srpg.
 ### Owned files
 - `scripts/world/world_map.gd` — stage progression, random regeneration
 - `scripts/autoload/game_state.gd` — card/perk activation state, chapter reset logic
-- `scripts/data/campaign.gd` — campaign structure data
-- `scripts/data/chapter_data.gd` — per-chapter stage seed/state
+- `scripts/data/campaign.gd` — campaign structure data (currently `stages: Array[Resource]`, one entry per single battle)
+- `scripts/data/stage_data.gd` (renamed from `chapter_data.gd` — the old name collided with this design doc's bigger "chapter" concept) — currently one battle's enemy roster only; the real per-chapter grouping (5 stages + chapter-end sequence) does not exist in code yet and must be added here
 - `scripts/data/party_roster.gd` — ally survival flags, in-chapter removal state
 
 ## Save / Load Rules
 - Save path: `user://saves/` JSON (per root `CLAUDE.md`).
 - Saved fields: `chapter_index`, `stage_index`, `confirmed_cards[]`, `active_perks{}`, `party_alive{}`.
 - On chapter reset: only reset `stage_index` and runtime stage seed for the current chapter; cards/perks from chapters ≤ current chapter remain.
-- Stage random regeneration: generate seed at runtime with `randi_range()` — do not persist it in `chapter_data.tres`.
+- Stage random regeneration: generate seed at runtime with `randi_range()` — do not persist it in the stage's `.tres` Resource.
 
 ## Workflow
 1. `game_state.gd` is the **single source of truth** for all persistent state — read and write through it only.
