@@ -1,8 +1,8 @@
 > Part of the full card pool. See card_pool_structure.md for overall breakdown and element_mechanics.md for the Earth design grammar (Guard/Growth).
 
-# Earth Cards — Rare (20, in progress)
+# Earth Cards — Rare (20)
 
-**Status:** IN PROGRESS — Defense (7) and Attack (6) confirmed. Utility (4) and Heal (3) not yet designed. Epic tier not yet designed (scheduled alongside Ice Epic + agnostic Epic).
+**Status:** Confirmed (Rare tier). Epic tier not yet designed (scheduled alongside Ice Epic + agnostic Epic).
 **Element:** Earth — primary mechanic Guard (resistance/counter), secondary mechanic Growth (nurturing/sustain)
 **Role split:** Defense 7 / Attack 6 / Utility 4 / Heal 3 (§4.2 "딜탱" identity — defense and attack both central, utility/heal lighter)
 
@@ -42,10 +42,33 @@
 
 *Draft values note: all flat numbers above (2, 4, 20%, 50%, 3-per-stack, etc.) are provisional pending overall calibration, matching the convention used in common_cards.md / fire_cards.md / ice_cards.md.*
 
+## Rare — Utility (4)
+
+Allies grow via the Perk system, not Earth cards — so these support allies through generic stats (AMR, positioning), not by handing out Guard stacks directly, mirroring how Fire/Ice support allies via temp STR / SPD rather than Burn/Frost stacks.
+
+| Card | Effect |
+|------|--------|
+| Earthen Empathy (대지의 유대감) | While own Guard ≥3: adjacent ally gains AMR +1 (persists as long as the condition holds) |
+| Provoke (도발) | While own Guard ≥3: adjacent enemies' next attack is forced to target self |
+| Binding Roots (결속의 뿌리) | Can swap positions with an adjacent ally at no move-range cost (once per own turn) |
+| Earth's Blessing (대지의 축복) | Battle start: all adjacent allies gain AMR +1 (this battle only) |
+
+*Note: Earthen Empathy / Provoke use a Guard ≥3 threshold, one tier below the ≥4 threshold used by Bedrock/Center of Gravity/Steadfast Growth — Utility is intentionally the earliest-triggering tier in Earth's numeric ladder.*
+
+*Implementation note: Provoke requires overriding enemy AI target selection (`grid_manager.gd`'s "smart target" logic) — noted for combat-programmer, not a blocker at the design stage.*
+
+## Rare — Heal (3)
+
+Earth's heal role leans on Growth's gradual/propagating flavor rather than a burst recovery or a low-HP safety net (Defense's Unshakable Will already covers that trigger for this element) — deliberately differentiating Earth's sustain from Fire's/Ice's panic-button-style heal cards.
+
+| Card | Effect |
+|------|--------|
+| Earthen Nourishment (대지의 자양) | Turn end: self temp STR +1 (accumulates, no cap) |
+| Root Sharing (뿌리 나눔) | Each time self gains temp STR (from any source): an adjacent ally also gains half that amount, rounded **down** |
+| Steadfast Growth (굳건한 성장) | While own Guard ≥4: turn end grants adjacent allies temp STR +1 |
+
 ---
 
 ## Open items
 
-- Utility (4 cards) — not yet designed
-- Heal (3 cards) — not yet designed
 - Earth Epic (4 cards) — deferred to the combined Epic design pass (Ice Epic + Earth Epic + 3 agnostic Epic)
