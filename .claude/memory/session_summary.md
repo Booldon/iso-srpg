@@ -5,44 +5,34 @@ metadata:
   type: project
 ---
 
-## 세션 요약 (2026-07-06)
+## 세션 요약 (2026-07-11)
 
 ### 작업 내용
-- Step 5 전체 구현 및 검증 완료 (4커밋)
-  - `BoonData` / `ChapterData` / `Campaign` Resource 타입 정의
-  - 부운 풀 6종 `.tres` + 3챕터 캠페인 데이터
-  - `GameState` 런 상태 확장 (current_chapter, active_boons, 세이브 v2)
-  - `title.tscn` / `world_map.tscn` / `boon_screen.tscn` 씬 + 씬 전환 흐름
-  - `BoonApplier` + `grid_manager` 챕터 소싱 / 부운 적용 통합
-- 버그 수정: `theme_override_font_sizes["font_size"]` → `add_theme_font_size_override()`
-- 개발자 8개 체크리스트 시각 검증 통과 확인
-- 크로스-머신 메모리 동기화 세팅 (`.claude/memory/` git 추적 + symlink)
-- `setup_claude_memory.sh` 스크립트 작성 (새 PC 셋업 자동화)
-- `/session-end` 슬래시 커맨드 + Stop 훅 (git 기반 fallback) 구성
+- 로그라이크 Fire Rare 카드 20장(불카드) 설계 재개 (이전 세션 유실분 복원)
+- 화상(Burn)/솔라(Solar) 베이스라인 규격 확정
+- 공격 역할 7장 확정
 
 ### 결정 사항
-- 로그라이크 구조: **선형 챕터 체인 + 런 내내 부운 누적 + 패배 시 런 리셋**
-- 적 구성은 `ChapterData.enemy_party`에서 소싱 → 코드 수정 없이 `.tres`만 편집으로 밸런싱
-- 세션 요약은 외부 API 없이 **현재 세션 Claude가 직접 작성** (`/session-end`)
-- Stop 훅은 git 기반 fallback만 (6시간 이상 오래된 경우에만 덮어씀)
-- `.claude/memory/`를 git에 커밋해 `git pull`로 크로스-머신 동기화
+- 화상 최대 5스택, 틱 피해 있음(스택당 1 STR/턴), 폭발은 Epic 카드 전용
+- 폭발 피해: 스택당 3(방어무시) 초안 / 3스택 이상이면 폭발 가능 상태
+- 역할 분배: 공격 7 / 유틸 5 / 방어 4 / 힐 4 (공격+유틸 중심)
+- 산출물: 설계 문서(docs/systems/fire_cards.md)만, 스키마·.tres는 이후 단계
+- 공격 7장 확정:
+  1. 불씨(Ember) — 공격 시 화상 +1스택 [Epic 폭발 선행]
+  2. 연쇄 발화(Kindling) — 화상 상태 적 공격 시 +2스택
+  3. 화염 강타(Flame Smite) — STR 피해 + 화상 +1스택
+  4. 맹화(Raging Flame) — 화상 스택 2 소모 → 즉발 STR 피해
+  5. 백열(White Heat) — 이번 턴 대상 화상 틱 2배
+  6. 과열(Overheat) — 화상 3스택 이상 대상에 추가 즉발 피해
+  7. 겁화(Conflagration) — 인접 적 전체 화상 +1스택 (광역)
+- 진행 방식: 한 번에 전체가 아닌, 역할별로 상의하며 설계
 
-### 다음 작업 (Step 5 잔여)
-- **Dialogue Manager 스텁** — CLAUDE.md 명시 요구사항. 전투 전후 대사 인터페이스 정의
-- **캠페인 클리어 엔딩 화면** — 3챕터 완료 후 현재 월드맵에 "전투 시작" 비활성화만 됨
-- **파티 멤버 이름** — `UnitStats`에 `unit_name` 필드 없어 월드맵에 이름 표시 불가
-- **부운 풀 확장** — 현재 6종, 더 다양한 효과 추가 가능
+### 다음 작업
+- 연쇄 발화 엣지케이스 확정 (비화상 대상 시 +1 vs 0)
+- 화상 스택 자연 감소 여부 결정(A 영구 유지 / B 자연 감소) → 유틸 5장 방향 결정
+- 유틸 5 → 방어 4 → 힐 4 순으로 설계 이어가기
+- Epic 폭발 선행 매핑 확정 후 fire_cards.md 작성
 
 ### 주요 파일 변경
-- `scripts/data/boon_data.gd` / `chapter_data.gd` / `campaign.gd` (신규)
-- `scripts/battle/boon_applier.gd` (신규)
-- `scripts/world/title.gd` / `world_map.gd` / `boon_screen.gd` (신규)
-- `scenes/world/title.tscn` / `world_map.tscn` / `boon_screen.tscn` (신규)
-- `scripts/autoload/game_state.gd` (런 상태 + 세이브 v2)
-- `scripts/battle/grid_manager.gd` (챕터 소싱 + 부운 적용)
-- `scripts/battle/result_screen.gd` (패배 전용, 타이틀 복귀)
-- `data/campaign.tres` / `data/chapters/*.tres` / `data/boons/*.tres` (신규)
-- `.claude/memory/` (git 추적 시작)
-- `.claude/commands/session-end.md` / `.claude/scripts/session_summary.py` (신규)
-- `setup_claude_memory.sh` (신규)
-- `project.godot` (메인 씬 → title.tscn)
+- (없음 — 설계 논의 단계, docs/systems/fire_cards.md 미작성)
+- 플랜 파일: .claude/plans/system-20-parallel-storm.md

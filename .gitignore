@@ -11,6 +11,7 @@ saves/
 # OS
 .DS_Store
 Thumbs.db
+*:Zone.Identifier
 
 # Claude Code — machine-specific permissions (do not commit)
 .claude/settings.local.json
