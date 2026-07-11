@@ -6,10 +6,10 @@
 | Tier   | Type                    | Count                  | Notes                                                          |
 |--------|-------------------------|------------------------|----------------------------------------------------------------|
 | Common | Element-agnostic        | 15                     | Pure stat. Confirmed — see common_cards.md                     |
-| Rare   | Fire / Earth / Ice      | 20 per element = 60    | Element-specific skill cards                                   |
-| Rare   | Element-agnostic        | 10                     | Passive type (5) + Skill type (5)                              |
-| Epic   | Fire / Earth / Ice      | 4 per element = 12     | Finisher cards, require Rare prerequisites                     |
-| Epic   | Element-agnostic        | 3                      | Combo-type (A) / Veteran-type (B) / Cross-type (C) — 1 each   |
+| Rare   | Fire / Earth / Ice      | 20 per element = 60    | Element-specific skill cards. Confirmed — see fire_cards.md / ice_cards.md / earth_cards.md |
+| Rare   | Element-agnostic        | 10                     | Passive type (5) + Skill type (5). Confirmed — see agnostic_cards.md |
+| Epic   | Fire / Earth / Ice      | 4 per element = 12     | Finisher cards, require Rare prerequisites. Confirmed — see fire_cards.md / ice_cards.md / earth_cards.md |
+| Epic   | Element-agnostic        | 3                      | Combo-type (A) / Veteran-type (B) / Cross-type (C) — 1 each. Confirmed — see agnostic_cards.md |
 | **Total** |                      | **100**                |                                                                |
 
 ---
@@ -35,7 +35,7 @@
 
 ### Agnostic Epic (3 cards): one of each unlock type
 - **Combo-type (A):** requires specific agnostic Rare card combination
-- **Veteran-type (B):** requires total Rare card count ≥ N (TBD threshold)
+- **Veteran-type (B):** requires total Rare card count ≥15 (was TBD, now confirmed)
 - **Cross-type (C):** requires agnostic Rare + element stack tier ≥ 2 in any element
 - Note: agnostic Epic intentionally limited to 3 — element cards are the dominant pick
 

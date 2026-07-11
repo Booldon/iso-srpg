@@ -51,3 +51,33 @@ Per `docs/roles.md` §2: no agent begins implementation on a §9 TBD item — or
 **Observation:** Fire and Ice both arrived at a "once per battle, when own Strength ≤30%, trigger a strong defensive/recovery effect" card in **both** their Defense and Heal sets (Fire: Phoenix Ember / Phoenix Feather; Ice: Cold Preservation / Hibernation). Earth deliberately breaks this pattern: Unshakable Will (Defense) has the trigger, but Earth's Heal set (Earthen Nourishment / Root Sharing / Steadfast Growth) has no low-HP trigger at all — it leans entirely on Growth's gradual/propagating flavor instead, giving Earth a passive-sustain identity distinct from Fire's/Ice's panic-button heals.
 
 **How to apply:** Don't assume every element needs a low-HP safety net in every role — the shared template is a convenience, not a hard rule. Keep this asymmetry in mind when balancing: Earth's Strength never gets a heal-side "instant save" the way Fire/Ice do, so its survivability comes from steady AMR/temp-STR accumulation instead of a clutch trigger.
+
+---
+
+## No active-skill slot limit (2026-07-11)
+
+**Decision:** There is no pre-battle "equip N active skills from your pool" loadout system. Every unlocked card that has a genuine active/alternative-action component (as opposed to passive always-on triggers) is available whenever its trigger condition is met, with no artificial cap on how many can be available in a single battle.
+
+**Why:** Auditing the ~74 element + agnostic cards designed so far, the large majority are passive (auto-trigger on a normal attack/hit, e.g. Ember, Frost Plating, Brittle Coat) and need no UI slot at all. Only a small minority spend a resource as an alternative to a normal attack (Raging Flame, Crush, all Epic finishers, Double Strike, Vanguard Rush). For those, the existing stack-threshold conditions already bound how many are simultaneously offerable on a given attack — a hard slot limit would add pre-battle UI complexity (contrary to the project's "one vertical slice at a time" principle) to solve a problem that may not materialize. If playtesting later shows decision-paralysis in the attack menu, add a slot system then.
+
+**How to apply:** ui-programmer should extend `attack_menu.gd` to show extra options (beyond the existing Armor/Strength choice) only for active-cost cards whose condition currently holds on the selected target — not a fixed list of equipped skills.
+
+---
+
+## Combat resolution stays fully deterministic — no RNG-based card effects (2026-07-11)
+
+**Decision:** No card in any tier introduces a probability/chance element (e.g. "25% chance to..."). All effects are deterministic given the current game state.
+
+**Why:** `Combat.resolve_attack` computes `damage = attacker.strength - target.armor` with no randomness anywhere in the combat resolution. Introducing RNG at the card level would be a first-of-its-kind system change with much broader implications (save/replay determinism, difficulty tuning, player trust in visible numbers) than any single card is worth. This surfaced while designing the Agnostic Rare skill set, where a "critical hit chance" card was considered and rejected for this reason.
+
+**How to apply:** If a future card idea's only interesting form involves a percentage chance, redesign it as a deterministic threshold/condition instead (the project's cards consistently do this already — e.g. stack-count thresholds rather than "chance to apply").
+
+---
+
+## Undying Will vs. the chapter-reset rule (2026-07-11)
+
+**Decision:** The agnostic Rare skill card Undying Will ("survive at Strength 1 instead of dying") is capped at **once per chapter**, not once per battle.
+
+**Why:** §2.3 makes protagonist death carry real weight (full chapter reset). A once-per-battle version of this card would neutralize that stakes in every single fight, which is too strong for a Rare-tier card and undermines the roguelike tension the chapter-reset rule is there to create. Once-per-chapter preserves the safety-net value while still leaving death a real possibility across a chapter's 5 stages.
+
+**How to apply:** meta-programmer implementing the chapter-reset/death-check logic (`GameState`, `_place_players()`, etc.) needs to track this card's usage at chapter scope (reset the "used" flag on chapter start/reset), not at battle scope like other cards' "once per battle" triggers.

@@ -1,8 +1,8 @@
 > Part of the full card pool. See card_pool_structure.md for overall breakdown and element_mechanics.md for the Earth design grammar (Guard/Growth).
 
-# Earth Cards — Rare (20)
+# Earth Cards — Rare (20) + Epic (4)
 
-**Status:** Confirmed (Rare tier). Epic tier not yet designed (scheduled alongside Ice Epic + agnostic Epic).
+**Status:** Confirmed
 **Element:** Earth — primary mechanic Guard (resistance/counter), secondary mechanic Growth (nurturing/sustain)
 **Role split:** Defense 7 / Attack 6 / Utility 4 / Heal 3 (§4.2 "딜탱" identity — defense and attack both central, utility/heal lighter)
 
@@ -69,6 +69,13 @@ Earth's heal role leans on Growth's gradual/propagating flavor rather than a bur
 
 ---
 
-## Open items
+## Epic (4)
 
-- Earth Epic (4 cards) — deferred to the combined Epic design pass (Ice Epic + Earth Epic + 3 agnostic Epic)
+Each Epic requires owning specific Rare card(s) of the same element before it appears in the pick pool (§6.4). Unlike Fire/Ice, Earth's Epic set does not include a "dual low-HP-trigger safety card" ultimate — consistent with Earth's Heal set having no low-HP trigger at all (see decisions_log.md).
+
+| Card | Effect | Prerequisite (Rare) |
+|------|--------|----------------------|
+| Cataclysm (대격변) | Consume all Guard stacks → armor-ignoring damage = stacks consumed × 6 (single target) | Crush |
+| Earthquake Fury (대지분노의 진) | AoE: all adjacent enemies take armor-ignoring damage = own current Guard stack × 3 (no stack consumption) | Tremor |
+| Impenetrable Fortress (철옹성) | Always active, no stack condition: adjacent enemies' next attack always targets self; incoming damage -50%; counter-damage ×2 | Provoke |
+| Eternal Earth (불멸의 대지) | Turn end: party-wide temp AMR += own current Guard stack count (this battle only) | Awakening of Earth **and** Steadfast Growth |

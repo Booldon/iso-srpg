@@ -1,8 +1,8 @@
 > Part of the full card pool. See card_pool_structure.md for overall breakdown and element_mechanics.md for the Ice design grammar (Frost/Preserve).
 
-# Ice Cards — Rare (20)
+# Ice Cards — Rare (20) + Epic (4)
 
-**Status:** Confirmed (Rare tier). Epic tier not yet designed (scheduled alongside Earth Epic + agnostic Epic).
+**Status:** Confirmed
 **Element:** Ice — primary mechanic Frost (control), secondary mechanic Preserve (protection)
 **Role split rationale:** Ice's primary synergy role is tanker/control (§4.2), the inverse of Fire's attack-heavy split — so Utility and Defense lead here instead of Attack.
 
@@ -61,3 +61,16 @@ Ice's heal role is expressed as **damage prevention** (freezing enemies before t
 | Hibernation (겨울잠) | Once per battle, when own Strength ≤30%: instantly fill one adjacent enemy's Frost to max stack |
 
 *Draft values note: the -10%/stack, and all flat numbers above, are provisional pending overall calibration.*
+
+---
+
+## Epic (4)
+
+Each Epic requires owning specific Rare card(s) of the same element before it appears in the pick pool (§6.4).
+
+| Card | Effect | Prerequisite (Rare) |
+|------|--------|----------------------|
+| Absolute Zero Strike (절대영도의 일격) | Instantly Freeze the target regardless of its current Frost stack, plus a fixed armor-ignoring damage of 25 | Absolute Zero |
+| Permafrost (영구 동토) | AoE: instantly Freeze all adjacent enemies regardless of their current Frost stack | Frost Breath |
+| Frozen Judgment (얼어붙은 심판) | On being hit: reflect formula upgraded from stacks × 2 to **stacks × 6**, and the reflected target is force-Frozen regardless of stack | Frostbite Retort |
+| General Winter's Grace (동장군의 은총) | No HP-threshold gate. Once per battle: gain AMR +4 **and** instantly Freeze one adjacent enemy, simultaneously | Cold Preservation **and** Hibernation |
