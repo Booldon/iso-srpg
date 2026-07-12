@@ -12,7 +12,7 @@
 
 - **Guard max stack:** 5
 - **Per-stack effect:** AMR +1 (stack 5 = AMR +5) — unlike Fire/Ice, Guard stacks directly raise a real combat stat rather than being a separate counter
-- **Counter-damage (innate effect of holding Guard stacks, not gated by any specific card):** on being hit while holding Guard stacks, reflect armor-ignoring damage = stacks × 2 (fixed value — matches the fixed-value convention used for Fire's tick damage and Ice's Frostbite Retort, rather than scaling off the unit's own STR/AMR)
+- **Counter-damage (innate effect of holding Guard stacks, not gated by any specific card):** on being hit while holding Guard stacks, reflect armor-ignoring damage = stacks × 1 (fixed value — matches the fixed-value convention used for Fire's tick damage and Ice's Frostbite Retort, rather than scaling off the unit's own STR/AMR). Reduced from × 2 on 2026-07-12 — see `decisions_log.md`
 - **No natural decay** — same reasoning as Frost: Guard is not a runaway-damage mechanic, and decaying it would undercut Earth's tank identity (stacking Guard *is* the defensive payoff)
 
 ---
@@ -23,7 +23,7 @@
 |------|--------|
 | Earthen Bulwark (대지의 방패) | Battle start: Guard +2 stacks |
 | Steadfast Stance (견고한 자세) | If self does not move on its turn (waits): Guard +1 additional stack |
-| Thorn Armor (가시 갑옷) | Counter-damage doubled (effectively stacks × 4) |
+| Thorn Armor (가시 갑옷) | Counter-damage doubled (effectively stacks × 2) |
 | Earthen Bond (대지의 유대) | When an adjacent ally is hit: consume 1 Guard stack → that ally gains AMR +2 for this incoming hit only |
 | Unshakable Will (부동의 의지) | Once per battle, when own Strength ≤30%: instantly fill Guard to max (5) |
 | Bedrock (반석) | While own Guard ≥4: incoming damage -20% |
