@@ -81,3 +81,17 @@ Per `docs/roles.md` §2: no agent begins implementation on a §9 TBD item — or
 **Why:** §2.3 makes protagonist death carry real weight (full chapter reset). A once-per-battle version of this card would neutralize that stakes in every single fight, which is too strong for a Rare-tier card and undermines the roguelike tension the chapter-reset rule is there to create. Once-per-chapter preserves the safety-net value while still leaving death a real possibility across a chapter's 5 stages.
 
 **How to apply:** meta-programmer implementing the chapter-reset/death-check logic (`GameState`, `_place_players()`, etc.) needs to track this card's usage at chapter scope (reset the "used" flag on chapter start/reset), not at battle scope like other cards' "once per battle" triggers.
+
+---
+
+## Card application timing: immediate per-stage, not batched at chapter end (2026-07-12)
+
+**Decision:** A card won from a stage-clear activates **immediately**, contributing to the same chapter's remaining stages and boss fight — not held pending until the chapter ends. §6.1's "챕터 클리어 시 그 챕터에서 획득한 카드 전부 활성화" wording is superseded by this decision (see corresponding edit to `roguelike-layer-design.md` §6.1).
+
+**Why:** Two problems surfaced from a manual 3v3 balance simulation (protagonist + 2 allies vs stage-3 grunt/fast/tank, using the actual `turn_manager.gd` speed-pairing and a highest-STR-target enemy AI):
+1. **Pacing** — with batched application, the character stays flat for 4 stages and jumps by 5 cards all at once at the chapter boundary. This reads as dead time mid-chapter.
+2. **Structural mismatch with §4.3** — chapter difficulty escalates *within* the chapter (late stages get 강화판 monsters), but batching meant the player fights that escalation using only the *previous* chapter's cards, never benefiting from the current chapter's own picks until after the hardest fights (including the boss) are already over. Player power was flat while enemy power ramped — backwards from the intended risk/reward curve.
+
+Note: batching was never required by §2.3's reset rule. "직전 챕터까지 확정된 카드만 유지" already means a chapter reset discards everything earned in the current attempt, whether or not it had been "activated" — so immediate application doesn't weaken the reset stakes at all.
+
+**How to apply:** meta-programmer's card-acquisition flow should call the activation path right after each stage-clear card pick, not defer it to chapter-end. Chapter-reset logic still wipes all of the current chapter's picks (active or not) and keeps only prior-chapter's confirmed cards, exactly as before. §7.3's per-chapter power table (5/10/15/20/25 cards) still holds as the *end-of-chapter* checkpoint, but the state mid-chapter is now a smooth ramp between those checkpoints rather than a flat line followed by a jump.
