@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://card0ember0001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "ember"
+title = "불씨"
+description = "공격 시: 화상(Burn) 1 스택 부여."
+element = 1
+tier = 1
+on_attack_burn = 1
+on_attack_burn_requires_burning = false

@@ -1,36 +1,56 @@
 ---
 name: session-summary
 description: 가장 최근 세션에서 작업한 내용 요약
-metadata:
+metadata: 
+  node_type: memory
   type: project
+  originSessionId: c9fc6f8a-a66e-46c8-9d6c-79fd138c3099
 ---
 
-## 세션 요약 (2026-07-12)
+## 세션 요약 (2026-07-13)
 
 ### 작업 내용
-- 컴퓨터 다운 후 세션 복구: git 로그/작업트리 점검 결과 유실된 작업 없음 확인 (session_summary.py의 사소한 미커밋 diff 1건만 존재, 이번 세션 내내 미해결로 남겨둠)
-- 유실됐던 대화 맥락(챕터3/스테이지3 대상 증강·카드 세트 밸런스 테스트) 재구성 — 카드 풀은 이미 100장 전체 확정 상태였음을 확인
-- `turn_manager.gd`/`combat.gd`/`grid_manager.gd` 실제 코드를 근거로 3v3 전체 턴 시뮬레이션 수행 (화상 틱=상대 턴 시작 시, AI=최고 STR 타겟팅 규칙 반영)
-- 시뮬레이션으로 땅(Earth) 속성이 다른 두 속성 대비 오버밸런스임을 구조적으로 규명 (피격 시 무방어 반격이 카드 게이팅 없이 내장 메커니즘이라 카드 1장으로 2가지 이득을 동시에 얻는 구조)
-- GitHub push 인증 설정: gh CLI 없음 확인 → SSH 키 신규 생성 → 사용자가 GitHub에 공개키 등록 → origin remote를 SSH로 전환 → push 성공
+- 테스트/디버그 모드 시스템 완성 (game_state.gd 수정, debug_menu 씬+스크립트, title TEST MODE 버튼, 디버그 시나리오 .tres 3종)
+- F1 단축키 → 백틱(`) 으로 변경 (Godot 에디터가 F1 가로챔 문제 해결)
+- 부운(BoonData/BoonApplier) 시스템 전면 제거, 카드 선택으로 통일
+  - GameState.active_boons → active_cards, advance_stage() 파라미터 정리
+  - grid_manager에서 BoonApplier 제거, active_cards를 주인공(armor_reduction_immune)에만 주입
+  - world_map 텍스트 "획득 부운" → "획득 카드"
+- 카드 등급 추첨 시스템 구현 (Common 30 / Rare 60 / Epic 10 기본 확률)
+  - CardDrawConfig Resource (가중치·천장·에픽 보정 전부 .tres 관리)
+  - CardDraw static 헬퍼 (roll_tier / eligible / draw)
+  - 소프트 천장(Rare 미등장마다 +15%) + 하드 천장(3스테이지째 Rare 확정)
+  - 에픽 게이팅: 조건없는 에픽 상시 후보 / 조건부 에픽은 전제 카드 보유 시 후보+가중↑
+  - CardData에 prerequisite_card_ids 필드 추가
+  - boon_screen.gd → CardDraw 사용으로 재작성
+  - 헤드리스 스모크 테스트 스크립트 작성 (card_draw_smoke_test.gd)
+- GDScript 파싱 에러 수정: Array[CardData.Tier] → Array[int] (GDScript 4는 외부 enum을 배열 원소 타입으로 허용 안 함)
+- 세이브 버전 v3 → v4 (active_boons→active_cards) → v5 (stages_since_rare 추가)
 
 ### 결정 사항
-- **카드 적용 시점**: 챕터 말 일괄 지급 → **획득 즉시 활성화**로 변경 (페이싱 문제 + §4.3 몹 강화 곡선과의 구조적 불일치 해소). 챕터 리셋 시 해당 챕터에서 딴 카드는 활성화 여부와 무관하게 전부 초기화되는 점은 유지
-- **땅 속성 반격 계수**: `stacks × 2` → `stacks × 1`로 하향 (Thorn Armor의 "2배" 표기도 그에 맞춰 수정). 카드 게이팅 등 더 큰 구조 변경은 기각 — 기존 카드(Retaliatory Strike 등)와의 연쇄 수정을 피하기 위해 계수 조정만 적용
-- **전투 파티 최대 인원**: 아군 로스터 문서(§7.1)의 "4슬롯(근접2+원거리2)" 기재가 오기였음을 확인, CLAUDE.md·실제 구현과 일치하는 **주인공+아군2명=3명**으로 정정, 역할(근접/원거리) 제약 없음도 명시
-- **적 파티 규모**: 최대 5명까지 확장 구상 중이나 미확정 — 그리드 크기·`turn_manager.gd` 페어링 로직 확장이 선행 필요, 현재 코드는 3v3 그대로 유지
-- **궁수 2번째 갈림길**: "마킹형"(표식 부여, 파티 전체 공격 시 표식 대상 추가 피해)으로 확정
-- **카드 1장 기준 파워치 수치화**: 공식화 보류, 실제 플레이테스트 이후로 미룸
+- 부운(BoonData) 폐기, 카드가 유일한 런 성장 시스템
+- 카드는 주인공 전용 (armor_reduction_immune == true 식별)
+- 기본 등급 확률 Common 30 / Rare 60 / Epic 10
+- 천장: 소프트 누적(+15%/스테이지) + 하드 확정(3스테이지째 Rare 강제)
+- 에픽: 조건없는 에픽 항상 후보 / 조건부 에픽은 전제 충족 시 후보 합류 + 가중 보정 (설계서 §6.4 완화)
+- 후보 부족 시 "있는 만큼만 표시" (빈 화면 방지 폴백 있음)
 
 ### 다음 작업
-- **아군 로스터 인원수 확정이 진행 중이던 채로 세션 종료** — 6명(챕터1: 주인공+아군2명 시작, 챕터2~5 각 챕터 시작마다 1명씩 신규 합류) 제안까지 나왔고 사용자 확정 답변 대기 상태
-- 로스터 인원수 확정되는 대로 "챕터당 신규 아군 합류 타이밍/빈도" 항목도 함께 정리
-- 남은 §9 미정 항목: 챕터 종료 이벤트 구체 내용, 유니크 몹 등장 확률/보상 수치, 바드 역할 범위(지형생성 제외 여부), 힐러 퍽 구체 수치, 적 파티 5명 확장 설계
-- `.claude/scripts/session_summary.py`의 미커밋 diff(`from __future__ import annotations` 1줄 추가)는 이번 세션과 무관하다고 판단해 계속 보류 중 — 처리 필요 시 확인
+- 에디터 시각 검증 (카드 선택 화면 등급 분리 동작, 천장 카운터, 주인공 카드 적용 확인)
+- Common 카드 및 Epic 카드 .tres 데이터 추가 (현재 Rare 3장만 존재, 폴백으로만 동작 중)
+- boon_screen.tscn → card_screen.tscn 개명 (파일명이 내용과 불일치, 스코프 억제 중)
+- data/boons/ 폴더 정리 (코드 참조 없으나 파일 잔존)
 
 ### 주요 파일 변경
-- `docs/systems/decisions_log.md` — 카드 적용 시점 결정, 땅 반격 계수 결정 항목 추가
-- `docs/systems/earth_cards.md` — 반격 계수 stacks×1로 수정, Thorn Armor 설명 수정
-- `roguelike-layer-design.md` — §6.1(카드 즉시 활성화), §7.1(파티 3명 정정, 역할 제약 없음), §7.2(궁수 마킹형 확정), §8, §9(해결 항목 정리) 수정
-- 커밋: `48cc7ca`, `b1185e4`, `8bc9f67` (모두 origin/master에 push 완료)
-- SSH 키 신규 생성: `~/.ssh/id_ed25519` (GitHub push 인증용)
+- `scripts/autoload/game_state.gd` — active_cards, stages_since_rare, save v5, 백틱 단축키
+- `scripts/world/boon_screen.gd` — CardDraw 기반 재작성
+- `scripts/world/title.gd` + `scenes/world/title.tscn` — TEST MODE 버튼
+- `scripts/battle/grid_manager.gd` — BoonApplier 제거, active_cards 주인공 주입
+- `scripts/world/world_map.gd` — 카드 수 표시
+- `scripts/data/card_data.gd` — prerequisite_card_ids 추가
+- `scripts/data/card_draw_config.gd` + `data/card_draw_config.tres` — 신규
+- `scripts/data/card_draw.gd` — 신규 (추첨 로직)
+- `scripts/data/card_draw_smoke_test.gd` — 신규 (헤드리스 테스트)
+- `scripts/debug/debug_menu.gd` + `scenes/debug/debug_menu.tscn` — 신규
+- `scripts/debug/CLAUDE.md` — 신규
+- `data/debug_scenarios/*.tres` — 신규/갱신

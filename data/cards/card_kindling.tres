@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://card0kindl0001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "kindling"
+title = "연쇄 발화"
+description = "불타는 대상 공격 시: 화상 2 스택 추가. 화상 없는 대상에게는 적용 불가."
+element = 1
+tier = 1
+on_attack_burn = 2
+on_attack_burn_requires_burning = true

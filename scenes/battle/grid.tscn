@@ -1,29 +1,29 @@
-[gd_scene load_steps=6 format=3 uid="uid://b5x1y2z3w4v5u6"]
+[gd_scene format=3 uid="uid://c4i2m4ev3n5qx"]
 
-[ext_resource type="Script" path="res://scripts/battle/grid_manager.gd" id="1_grid01"]
-[ext_resource type="Script" path="res://scripts/battle/turn_manager.gd" id="2_tm01"]
-[ext_resource type="PackedScene" path="res://scenes/battle/attack_menu.tscn" id="3_am01"]
-[ext_resource type="PackedScene" path="res://scenes/battle/stats_panel.tscn" id="4_sp01"]
-[ext_resource type="PackedScene" path="res://scenes/battle/result_screen.tscn" id="5_rs01"]
+[ext_resource type="Script" uid="uid://com80x3ibrg0d" path="res://scripts/battle/grid_manager.gd" id="1_grid01"]
+[ext_resource type="Script" uid="uid://dtnbagpw33pr3" path="res://scripts/battle/turn_manager.gd" id="2_tm01"]
+[ext_resource type="PackedScene" uid="uid://ttackmenu001" path="res://scenes/battle/attack_menu.tscn" id="3_am01"]
+[ext_resource type="PackedScene" uid="uid://ddndghlm4siyy" path="res://scenes/battle/stats_panel.tscn" id="4_sp01"]
+[ext_resource type="PackedScene" uid="uid://cwag53wmijc4o" path="res://scenes/battle/result_screen.tscn" id="5_rs01"]
 
-[node name="GridRoot" type="Node2D"]
+[node name="GridRoot" type="Node2D" unique_id=32731683]
 script = ExtResource("1_grid01")
 
-[node name="Camera2D" type="Camera2D" parent="."]
+[node name="Camera2D" type="Camera2D" parent="." unique_id=419961799]
 position = Vector2(0, 112)
 
-[node name="WorldContainer" type="Node2D" parent="."]
+[node name="WorldContainer" type="Node2D" parent="." unique_id=1971201703]
 
-[node name="FloorLayer" type="Node2D" parent="WorldContainer"]
+[node name="FloorLayer" type="Node2D" parent="WorldContainer" unique_id=1873728732]
 
-[node name="ActorsLayer" type="Node2D" parent="WorldContainer"]
+[node name="ActorsLayer" type="Node2D" parent="WorldContainer" unique_id=6463222]
 y_sort_enabled = true
 
-[node name="TurnManager" type="Node" parent="."]
+[node name="TurnManager" type="Node" parent="." unique_id=1002342886]
 script = ExtResource("2_tm01")
 
-[node name="AttackMenu" parent="." instance=ExtResource("3_am01")]
+[node name="AttackMenu" parent="." unique_id=1154780947 instance=ExtResource("3_am01")]
 
-[node name="StatsPanel" parent="." instance=ExtResource("4_sp01")]
+[node name="StatsPanel" parent="." unique_id=204939027 instance=ExtResource("4_sp01")]
 
-[node name="ResultScreen" parent="." instance=ExtResource("5_rs01")]
+[node name="ResultScreen" parent="." unique_id=1820249351 instance=ExtResource("5_rs01")]

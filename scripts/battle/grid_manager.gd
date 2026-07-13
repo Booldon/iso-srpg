@@ -6,6 +6,7 @@ const GRID_COLS: int = 8
 const GRID_ROWS: int = 8
 
 const UNIT_SCENE := preload("res://scenes/battle/unit.tscn")
+const ENEMY_TURN_DELAY: float = 0.5
 
 @onready var _floor: Node2D = $WorldContainer/FloorLayer
 @onready var _actors: Node2D = $WorldContainer/ActorsLayer
@@ -13,6 +14,8 @@ const UNIT_SCENE := preload("res://scenes/battle/unit.tscn")
 @onready var _attack_menu: CanvasLayer = $AttackMenu
 @onready var _stats_panel: CanvasLayer = $StatsPanel
 @onready var _result_screen: CanvasLayer = $ResultScreen
+
+@export var _debug_player_cards: Array[String] = []
 
 var _astar := AStar2D.new()
 var _players: Array[Unit] = []
@@ -79,6 +82,14 @@ func _input(event: InputEvent) -> void:
 
 
 func _on_turn_started(unit: Unit) -> void:
+	var burn_dmg := StatusEffects.tick_turn_start(unit)
+	if burn_dmg > 0 and unit.stats.strength <= 0:
+		_kill_unit(unit)
+		_check_battle_end()
+		if _battle_over:
+			return
+		_on_turn_started(_turn_manager.current_unit())
+		return
 	if unit.is_player:
 		# Soft-lock guard: if the unit can neither move nor attack, skip its turn automatically
 		var reachable := _compute_reachable(unit)
@@ -110,6 +121,7 @@ func _execute_player_attack(hit_armor: bool) -> void:
 	var attacker := _turn_manager.current_unit()
 	attacker.face_toward_pos(_pending_target.position)
 	Combat.resolve_attack(attacker, _pending_target, hit_armor)
+	CardEffects.apply_on_attack(attacker, _pending_target)
 	if _pending_target.stats.strength <= 0:
 		_kill_unit(_pending_target)
 		_check_battle_end()
@@ -132,7 +144,7 @@ func _do_player_move(unit: Unit, cell: Vector2i) -> void:
 
 
 func _run_enemy_turn(unit: Unit) -> void:
-	await get_tree().create_timer(0.5).timeout
+	await get_tree().create_timer(ENEMY_TURN_DELAY).timeout
 	var target := _find_adjacent_player(unit)
 	if target:
 		# Smart attack: prefer real damage; avoid wasting attack on immune armor
@@ -144,6 +156,7 @@ func _run_enemy_turn(unit: Unit) -> void:
 			hit_armor = not target.stats.armor_reduction_immune  # hit Armor only if target is not immune
 		unit.face_toward_pos(target.position)
 		Combat.resolve_attack(unit, target, hit_armor)
+		CardEffects.apply_on_attack(unit, target)
 		if target.stats.strength <= 0:
 			_kill_unit(target)
 			_check_battle_end()
@@ -415,7 +428,17 @@ func _place_players() -> void:
 		var unit := UNIT_SCENE.instantiate()
 		unit.is_player = true
 		unit.stats = load(rec["path"]).duplicate()
-		BoonApplier.apply_ally_boons(unit.stats, GameState.active_boons)
+		# Cards are protagonist-only (armor_reduction_immune marks the protagonist).
+		# Three sources merged in order: acquired this run, editor @export, debug scenario.
+		var all_card_paths: Array[String] = []
+		if unit.stats.armor_reduction_immune:
+			all_card_paths.append_array(GameState.active_cards)
+		all_card_paths.append_array(_debug_player_cards)
+		all_card_paths.append_array(GameState.debug_player_cards)
+		for card_path in all_card_paths:
+			var card := load(card_path) as CardData
+			if card:
+				unit.cards.append(card)
 		unit.roster_path = rec["path"]
 		unit.grid_col = cell.x
 		unit.grid_row = cell.y
@@ -446,7 +469,7 @@ func _place_enemies() -> void:
 		var unit := UNIT_SCENE.instantiate()
 		unit.is_player = false
 		unit.stats = stats_res.duplicate()
-		BoonApplier.apply_enemy_boons(unit.stats, GameState.active_boons)
+		# No boon system — enemy debuffs are card effects applied during combat.
 		unit.grid_col = cell.x
 		unit.grid_row = cell.y
 		unit.position = grid_to_screen(cell.x, cell.y)

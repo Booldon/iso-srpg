@@ -57,6 +57,8 @@ func remove_unit(unit: Unit) -> void:
 	_units.remove_at(idx)
 	if idx < _index:
 		_index -= 1
+	if _index >= _units.size():
+		_index = 0
 
 
 func get_all_units() -> Array[Unit]:

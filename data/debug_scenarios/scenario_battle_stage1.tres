@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="DebugScenario" format=3 uid="uid://dbgscn0bat01"]
+
+[ext_resource type="Script" path="res://scripts/data/debug_scenario.gd" id="1_dbgscn"]
+
+[resource]
+script = ExtResource("1_dbgscn")
+label = "전투: 스테이지1 (Ember 카드)"
+target_scene = "res://scenes/battle/grid.tscn"
+current_stage = 0
+active_cards = ["res://data/cards/card_ember.tres"]
+debug_player_cards = []

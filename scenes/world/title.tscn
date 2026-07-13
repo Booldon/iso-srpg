@@ -36,3 +36,7 @@ text = "새 게임"
 [node name="ContinueButton" type="Button" parent="Center/VBox"]
 custom_minimum_size = Vector2(0, 54)
 text = "이어하기"
+
+[node name="TestModeButton" type="Button" parent="Center/VBox"]
+custom_minimum_size = Vector2(0, 54)
+text = "TEST MODE"

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardDrawConfig" format=3 uid="uid://carddrawcfg01"]
+
+[ext_resource type="Script" path="res://scripts/data/card_draw_config.gd" id="1_cfg"]
+
+[resource]
+script = ExtResource("1_cfg")
+common_weight = 30.0
+rare_weight = 60.0
+epic_weight = 10.0
+rare_pity_soft_bonus = 15.0
+rare_pity_hard_cap = 3
+epic_conditioned_weight_mult = 2.0
+pick_count = 3

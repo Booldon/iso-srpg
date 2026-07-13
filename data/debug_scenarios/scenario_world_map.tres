@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="DebugScenario" format=3 uid="uid://dbgscn0wmap1"]
+
+[ext_resource type="Script" path="res://scripts/data/debug_scenario.gd" id="1_dbgscn"]
+
+[resource]
+script = ExtResource("1_dbgscn")
+label = "월드맵 (카드 2장 적용)"
+target_scene = "res://scenes/world/world_map.tscn"
+current_stage = 1
+active_cards = ["res://data/cards/card_ember.tres", "res://data/cards/card_kindling.tres"]
+debug_player_cards = []

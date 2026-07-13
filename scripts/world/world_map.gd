@@ -47,5 +47,5 @@ func _refresh_stage_nodes() -> void:
 
 func _refresh_party_label() -> void:
 	var living := GameState.get_living_party()
-	var boon_count := GameState.active_boons.size()
-	_party_label.text = "파티 생존 %d명   ·   획득 부운 %d개" % [living.size(), boon_count]
+	var card_count := GameState.active_cards.size()
+	_party_label.text = "파티 생존 %d명   ·   획득 카드 %d장" % [living.size(), card_count]

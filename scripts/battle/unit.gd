@@ -19,6 +19,8 @@ var stats: UnitStats = null
 var grid_col: int = 0
 var grid_row: int = 0
 var is_moving: bool = false
+var status: Dictionary = {}     # StatusEffects.Type(int) → stack count
+var cards: Array[CardData] = [] # injected at placement; enemies always []
 var roster_path: String = ""
 
 

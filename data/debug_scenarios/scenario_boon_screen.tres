@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="DebugScenario" format=3 uid="uid://dbgscn0boon01"]
+
+[ext_resource type="Script" path="res://scripts/data/debug_scenario.gd" id="1_dbgscn"]
+
+[resource]
+script = ExtResource("1_dbgscn")
+label = "카드 선택 테스트"
+target_scene = "res://scenes/world/boon_screen.tscn"
+current_stage = 0
+active_cards = []
+debug_player_cards = []

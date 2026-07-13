@@ -1,0 +1,44 @@
+[gd_scene format=3 uid="uid://dbgmenu0001"]
+
+[ext_resource type="Script" path="res://scripts/debug/debug_menu.gd" id="1_dbg"]
+
+[node name="DebugMenu" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_dbg")
+
+[node name="Background" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.05, 0.05, 0.08, 1)
+
+[node name="Header" type="Label" parent="."]
+offset_left = 40.0
+offset_top = 20.0
+offset_right = 760.0
+offset_bottom = 56.0
+text = "🛠 DEBUG — 시나리오 선택"
+theme_override_font_sizes/font_size = 24
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+offset_left = 40.0
+offset_top = 72.0
+offset_right = 760.0
+offset_bottom = 520.0
+
+[node name="ScenarioList" type="VBoxContainer" parent="ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="Footer" type="HBoxContainer" parent="."]
+offset_left = 40.0
+offset_top = 534.0
+offset_right = 760.0
+offset_bottom = 580.0
+
+[node name="ExitButton" type="Button" parent="Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 40)
+text = "타이틀로 (디버그 종료)"

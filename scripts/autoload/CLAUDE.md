@@ -12,6 +12,23 @@ CLAUDE.md의 "No autoloads before architecture warrants it" 규칙은 크로스-
 필요해지는 시점까지 미루는 규칙이다. step 5(세이브+로스터)가 그 시점 — 전투 씬 리로드
 후에도 파티 상태가 유지되어야 하므로, GameState autoload 1개를 공식 도입(개발자 확인됨).
 
+## 디버그 모드 (Debug)
+
+`debug_mode: bool` 플래그가 켜지면 `_active_save_path()` 가 `user://saves/save_debug.json` 을 반환.
+`save_game()` / `load_game()` / `has_save()` 모두 이 헬퍼를 경유하므로 실제 `save.json` 은 보호됨.
+
+진입 경로:
+- 타이틀 "TEST MODE" 버튼 → `GameState.enter_debug_mode()`
+- 어디서든 **F1** → `_unhandled_input()` → `enter_debug_mode()` + debug_menu.tscn 전환
+  (두 경로 모두 `OS.is_debug_build()` 이 true일 때만 동작)
+
+`debug_player_cards: Array[String]` — 디버그 씬에서 전투 진입 시 `grid_manager._place_players()` 가
+플레이어 유닛에 카드를 주입. 일반 세이브 JSON에는 기록되지 않는 transient 값.
+
+종료: `GameState.exit_debug_mode()` → `debug_mode = false`, 이후 세이브는 다시 `save.json` 대상.
+
+---
+
 ## 세이브 스키마 v3 (user://saves/save.json)
 
 ```json
