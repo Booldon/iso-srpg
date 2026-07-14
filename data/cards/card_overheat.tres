@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://cardoverheat00001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "overheat"
+title = "과열"
+description = "공격 시: 대상 Burn ≥3이면 Burn 소비 없이 방어 무시 즉발 데미지 +4."
+element = 1
+tier = 1
+on_attack_min_burn = 3
+on_attack_burst_flat = 4

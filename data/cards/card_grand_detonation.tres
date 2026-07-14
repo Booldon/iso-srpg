@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://cardgranddetonation"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "grand_detonation"
+title = "대폭발"
+description = "공격 시: 대상 Burn ≥3이면 Burn 전량 소비 → 방어 무시 데미지 +스택×5."
+element = 1
+tier = 2
+prerequisite_card_ids = ["ember"]
+on_attack_min_burn = 3
+on_attack_consume_all_burn = true
+on_attack_burst_per_stack = 5

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://cardragingflame01"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "raging_flame"
+title = "맹화"
+description = "공격 시: 대상 Burn ≥2이면 Burn 2 스택 소비 → 방어 무시 데미지 +6 (스택당 3)."
+element = 1
+tier = 1
+on_attack_min_burn = 2
+on_attack_consume_burn = 2
+on_attack_burst_per_stack = 3
