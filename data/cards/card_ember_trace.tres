@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://fire_etrc_001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "ember_trace"
+title = "잔불"
+description = "Burn 상태의 적이 사망 시: 남은 스택의 절반(올림)이 인접한 적에게 전이."
+element = 1
+tier = 1
+on_burn_kill_transfer_stacks = true

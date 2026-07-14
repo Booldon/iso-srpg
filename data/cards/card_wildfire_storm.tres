@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://fire_wfst_001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "wildfire_storm"
+title = "겁화의 폭풍"
+description = "공격 시: 대상과 인접 적 Burn을 최대치로 충전 → Burn 보유 적 전체에 방어 무시 데미지 4."
+element = 1
+tier = 2
+prerequisite_card_ids = ["conflagration"]
+on_attack_aoe_fill_max = true
+on_attack_aoe_burst_all_burning = 4

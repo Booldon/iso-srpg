@@ -72,3 +72,58 @@ static func apply_on_hit(attacker: Unit, target: Unit) -> void:
 	for card: CardData in target.cards:
 		if card.on_hit_burn_attacker > 0:
 			StatusEffects.add(attacker, StatusEffects.Type.BURN, card.on_hit_burn_attacker)
+
+
+# 공격 AoE 효과를 적용한다 (F3 신규).
+# splash_targets: target + target에 인접한 살아있는 적 (grid_manager._splash_targets()가 전달).
+# all_enemies: 살아있는 적 전체 (grid_manager._living_enemies()가 전달).
+# 처리 순서: [A] aoe_burn → [B] fill_max → [C] burst_all_burning.
+# 적 유닛(attacker)은 cards == [] 이므로 자동 no-op.
+static func apply_on_attack_aoe(
+		attacker: Unit,
+		splash_targets: Array[Unit],
+		all_enemies: Array[Unit]) -> void:
+	for card: CardData in attacker.cards:
+		# [A] AoE Burn 확산 (Conflagration)
+		if card.on_attack_aoe_burn > 0:
+			for u: Unit in splash_targets:
+				StatusEffects.add(u, StatusEffects.Type.BURN, card.on_attack_aoe_burn)
+		# [B] Burn MAX 충전 (Wildfire Storm 1단계)
+		if card.on_attack_aoe_fill_max:
+			for u: Unit in splash_targets:
+				var deficit: int = StatusEffects.MAX_STACK - StatusEffects.get_stacks(u, StatusEffects.Type.BURN)
+				if deficit > 0:
+					StatusEffects.add(u, StatusEffects.Type.BURN, deficit)
+		# [C] Burn 보유 적 전체 방어 무시 버스트 (Wildfire Storm 2단계: [B] 이후 갱신된 스택 반영)
+		if card.on_attack_aoe_burst_all_burning > 0:
+			for u: Unit in all_enemies:
+				if StatusEffects.get_stacks(u, StatusEffects.Type.BURN) > 0:
+					u.take_str_damage(card.on_attack_aoe_burst_all_burning)
+
+
+# Ember Trace: 불붙은 상태로 사망한 적의 Burn 스택 절반(올림)을 인접 적에 전이한다 (F3 신규).
+# dead_unit: 사망 처리 직전의 적 유닛 (_kill_unit 호출 전에 call).
+# adjacent_enemies: dead_unit에 인접한 살아있는 적 (grid_manager._adjacent_enemies_of(dead_unit)).
+# players: 살아있는 플레이어 유닛 (grid_manager._living_players()).
+# 발동 조건: dead_unit.Burn > 0 AND adjacent_enemies 비어있지 않음 AND players 중 보유자 존재.
+static func transfer_burn_on_death(
+		dead_unit: Unit,
+		adjacent_enemies: Array[Unit],
+		players: Array[Unit]) -> void:
+	var stacks: int = StatusEffects.get_stacks(dead_unit, StatusEffects.Type.BURN)
+	if stacks <= 0 or adjacent_enemies.is_empty():
+		return
+	# 보유자 확인: players 중 하나라도 on_burn_kill_transfer_stacks == true 카드 보유 시 발동
+	var owns: bool = false
+	for p: Unit in players:
+		for card: CardData in p.cards:
+			if card.on_burn_kill_transfer_stacks:
+				owns = true
+				break
+		if owns:
+			break
+	if not owns:
+		return
+	# 결정론적: adjacent_enemies[0] (4방향 순서상 첫 번째 인접 적)
+	var transfer: int = ceili(stacks / 2.0)
+	StatusEffects.add(adjacent_enemies[0], StatusEffects.Type.BURN, transfer)

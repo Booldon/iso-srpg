@@ -29,6 +29,8 @@ func _roll_and_build() -> void:
 		child.queue_free()
 	var pool  := _load_card_pool()
 	var owned := _owned_card_ids()
+	if OS.is_debug_build():
+		print("[BoonScreen] active_cards=%s  owned_ids=%s" % [GameState.active_cards, owned])
 	var tier  := CardDraw.roll_tier(CONFIG, GameState.stages_since_rare, _rng)
 	var picks := CardDraw.draw(CONFIG, pool, tier, owned, _rng)
 	_build_cards(picks)

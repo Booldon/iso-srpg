@@ -84,8 +84,8 @@ func _input(event: InputEvent) -> void:
 func _on_turn_started(unit: Unit) -> void:
 	var burn_dmg := StatusEffects.tick_turn_start(unit)
 	if burn_dmg > 0 and not unit.is_alive():
-		_kill_unit(unit)
-		_check_battle_end()
+		# Burn 틱으로 사망 → _sweep_deaths()로 Ember Trace 훅 통합 처리
+		_sweep_deaths()
 		if _battle_over:
 			return
 		_on_turn_started(_turn_manager.current_unit())
@@ -121,11 +121,9 @@ func _execute_player_attack(hit_armor: bool) -> void:
 	var attacker := _turn_manager.current_unit()
 	attacker.face_toward_pos(_pending_target.position)
 	_resolve_full_attack(attacker, _pending_target, hit_armor)
-	if not _pending_target.is_alive():
-		_kill_unit(_pending_target)
-		_check_battle_end()
-		if _battle_over:
-			return
+	_sweep_deaths()
+	if _battle_over:
+		return
 	_pending_target = null
 	_turn_manager.end_turn()
 
@@ -155,11 +153,9 @@ func _run_enemy_turn(unit: Unit) -> void:
 			hit_armor = not target.stats.armor_reduction_immune  # hit Armor only if target is not immune
 		unit.face_toward_pos(target.position)
 		_resolve_full_attack(unit, target, hit_armor)
-		if not target.is_alive():
-			_kill_unit(target)
-			_check_battle_end()
-			if _battle_over:
-				return
+		_sweep_deaths()
+		if _battle_over:
+			return
 	else:
 		# Approach the nearest living player unit
 		var nearest := _find_nearest_player(unit)
@@ -185,6 +181,7 @@ func _resolve_full_attack(attacker: Unit, target: Unit, hit_armor: bool) -> void
 	CardEffects.apply_on_attack(attacker, target)
 	CardEffects.apply_on_hit(attacker, target)
 	_apply_ashen_ward(attacker, target)
+	CardEffects.apply_on_attack_aoe(attacker, _splash_targets(target), _living_enemies())
 
 
 # Ashen Ward: target(피격된 아군)에 인접한 다른 플레이어 유닛이 보유한
@@ -205,6 +202,67 @@ func _apply_ashen_ward(attacker: Unit, target: Unit) -> void:
 		var unit_cell := Vector2i(unit.grid_col, unit.grid_row)
 		if absi(unit_cell.x - target_cell.x) + absi(unit_cell.y - target_cell.y) == 1:
 			StatusEffects.add(attacker, StatusEffects.Type.BURN, burn_amt)
+
+
+# 살아있는 플레이어 유닛 목록을 반환한다.
+func _living_players() -> Array[Unit]:
+	var result: Array[Unit] = []
+	for u: Unit in _turn_manager.get_all_units():
+		if u.is_player:
+			result.append(u)
+	return result
+
+
+# 살아있는 적 유닛 목록을 반환한다.
+func _living_enemies() -> Array[Unit]:
+	var result: Array[Unit] = []
+	for u: Unit in _turn_manager.get_all_units():
+		if not u.is_player:
+			result.append(u)
+	return result
+
+
+# unit에 인접한(맨해튼 거리=1) 살아있는 적 유닛 목록을 반환한다 (unit 자신 제외).
+# _unit_at 4방향 조회. Ember Trace, Ashen Ward, _splash_targets 등에서 사용.
+func _adjacent_enemies_of(unit: Unit) -> Array[Unit]:
+	var result: Array[Unit] = []
+	var dirs: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for dir in dirs:
+		var cell := Vector2i(unit.grid_col + dir.x, unit.grid_row + dir.y)
+		var neighbor := _unit_at.get(cell) as Unit
+		if neighbor and neighbor != unit and neighbor.is_player != unit.is_player:
+			result.append(neighbor)
+	return result
+
+
+# 공격 대상과 대상에 인접한 살아있는 적을 하나의 배열로 반환한다 (AoE splash 대상).
+func _splash_targets(target: Unit) -> Array[Unit]:
+	var result: Array[Unit] = [target]
+	var dirs: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for dir in dirs:
+		var cell := Vector2i(target.grid_col + dir.x, target.grid_row + dir.y)
+		var neighbor := _unit_at.get(cell) as Unit
+		# target과 같은 팀(적)이고 살아있는 유닛만 추가
+		if neighbor and neighbor.is_player == target.is_player and neighbor != target:
+			result.append(neighbor)
+	return result
+
+
+# AoE 버스트나 Burn 틱으로 여러 유닛이 동시 사망할 수 있으므로, 살아있지 않은 유닛을
+# 한 번에 처리한다. Ember Trace 훅도 여기서 통합 처리.
+# 턴 매니저에서 제거 후 _check_battle_end() 호출.
+func _sweep_deaths() -> void:
+	var dead: Array[Unit] = []
+	for u: Unit in _turn_manager.get_all_units():
+		if not u.is_alive():
+			dead.append(u)
+	for u: Unit in dead:
+		if not u.is_player:
+			# Ember Trace: 사망 직전 위치 기준 인접 살아있는 적에 스택 전이 (_kill_unit 호출 전)
+			CardEffects.transfer_burn_on_death(u, _adjacent_enemies_of(u), _living_players())
+		_kill_unit(u)
+	if not dead.is_empty():
+		_check_battle_end()
 
 
 func _move_unit(unit: Unit, cell: Vector2i) -> void:

@@ -65,3 +65,19 @@ enum Tier { COMMON, RARE, EPIC }
 # 이 카드를 보유한 유닛에 인접한 아군이 피격될 때, 그 공격자에게 Burn 부여.
 # 0 = no-op. 처리 책임: grid_manager._apply_ashen_ward(). (Ashen Ward: 2)
 @export var on_adjacent_ally_hit_burn_attacker: int = 0
+
+# --- AoE + on-death 전이 (F3 슬라이스 — 구현됨) ---
+# splash 대상 = target + target에 인접한 살아있는 적 (grid_manager._splash_targets() 계산).
+
+# 공격 시 splash 대상 각각에 Burn 부여 (Conflagration: 1).
+@export var on_attack_aoe_burn: int = 0
+
+# true면 공격 시 splash 대상 각각의 Burn을 MAX_STACK까지 충전 (Wildfire Storm 1단계).
+@export var on_attack_aoe_fill_max: bool = false
+
+# > 0이면 공격 시, AoE Burn 처리 후, Burn 보유한 살아있는 적 전체에 방어 무시 STR 데미지 (Wildfire Storm 2단계).
+@export var on_attack_aoe_burst_all_burning: int = 0
+
+# true면 불붙은 적이 사망할 때 남은 스택 절반(올림)을 인접 살아있는 적 하나에 전이 (Ember Trace).
+# 처리 책임: grid_manager._sweep_deaths() → CardEffects.transfer_burn_on_death().
+@export var on_burn_kill_transfer_stacks: bool = false
