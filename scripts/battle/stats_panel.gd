@@ -13,7 +13,11 @@ func show_unit(unit: Unit) -> void:
 		_str_label.text = "STR  %d (+%d)" % [unit.stats.strength, unit.temp_strength]
 	else:
 		_str_label.text = "STR  " + str(unit.stats.strength)
-	_arm_label.text = "ARM  " + str(unit.stats.armor)
+	# Show base armor; if burn_armor_debuff > 0, append "(-debuff)" so player can see the penalty
+	if unit.burn_armor_debuff > 0:
+		_arm_label.text = "ARM  %d (-%d)" % [unit.stats.armor, unit.burn_armor_debuff]
+	else:
+		_arm_label.text = "ARM  " + str(unit.stats.armor)
 	_spd_label.text = "SPD  " + str(unit.stats.speed)
 	var burn := StatusEffects.get_stacks(unit, StatusEffects.Type.BURN)
 	if burn > 0:
