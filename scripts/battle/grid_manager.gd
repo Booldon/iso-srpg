@@ -83,7 +83,7 @@ func _input(event: InputEvent) -> void:
 
 func _on_turn_started(unit: Unit) -> void:
 	var burn_dmg := StatusEffects.tick_turn_start(unit)
-	if burn_dmg > 0 and unit.stats.strength <= 0:
+	if burn_dmg > 0 and not unit.is_alive():
 		_kill_unit(unit)
 		_check_battle_end()
 		if _battle_over:
@@ -122,7 +122,7 @@ func _execute_player_attack(hit_armor: bool) -> void:
 	attacker.face_toward_pos(_pending_target.position)
 	Combat.resolve_attack(attacker, _pending_target, hit_armor)
 	CardEffects.apply_on_attack(attacker, _pending_target)
-	if _pending_target.stats.strength <= 0:
+	if not _pending_target.is_alive():
 		_kill_unit(_pending_target)
 		_check_battle_end()
 		if _battle_over:
@@ -148,7 +148,7 @@ func _run_enemy_turn(unit: Unit) -> void:
 	var target := _find_adjacent_player(unit)
 	if target:
 		# Smart attack: prefer real damage; avoid wasting attack on immune armor
-		var dmg := maxi(0, unit.stats.strength - target.stats.armor)
+		var dmg := maxi(0, unit.effective_strength() - target.stats.armor)
 		var hit_armor: bool
 		if dmg > 0:
 			hit_armor = false  # can deal real damage — hit Strength
@@ -157,7 +157,7 @@ func _run_enemy_turn(unit: Unit) -> void:
 		unit.face_toward_pos(target.position)
 		Combat.resolve_attack(unit, target, hit_armor)
 		CardEffects.apply_on_attack(unit, target)
-		if target.stats.strength <= 0:
+		if not target.is_alive():
 			_kill_unit(target)
 			_check_battle_end()
 			if _battle_over:
@@ -439,6 +439,10 @@ func _place_players() -> void:
 			var card := load(card_path) as CardData
 			if card:
 				unit.cards.append(card)
+		# Apply Solar / battle-start temp STR from cards (F1 — sums all battle_start_temp_str_self)
+		unit.temp_strength = 0
+		for card in unit.cards:
+			unit.temp_strength += card.battle_start_temp_str_self
 		unit.roster_path = rec["path"]
 		unit.grid_col = cell.x
 		unit.grid_row = cell.y
@@ -469,6 +473,7 @@ func _place_enemies() -> void:
 		var unit := UNIT_SCENE.instantiate()
 		unit.is_player = false
 		unit.stats = stats_res.duplicate()
+		unit.temp_strength = 0  # enemies never hold temp STR
 		# No boon system — enemy debuffs are card effects applied during combat.
 		unit.grid_col = cell.x
 		unit.grid_row = cell.y

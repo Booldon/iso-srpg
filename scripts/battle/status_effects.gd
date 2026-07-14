@@ -32,24 +32,35 @@ static func get_stacks(unit: Unit, type: Type) -> int:
 	return unit.status.get(type, 0)
 
 
+# unit.status[type] 에서 최대 amount 스택을 제거하고 실제 제거된 수를 반환한다.
+# amount <= 0 이면 no-op, 0 반환.
+# 호출자: CardEffects.apply_on_attack() 내 detonation 소비 처리.
+static func consume(unit: Unit, type: Type, amount: int) -> int:
+	if amount <= 0:
+		return 0
+	var current: int = unit.status.get(type, 0)
+	var removed: int = mini(current, amount)
+	unit.status[type] = current - removed
+	return removed
+
+
 # 해당 unit의 턴 시작 처리를 수행하고 실제 입힌 총 데미지를 반환한다.
 #
 # BURN 처리:
 #   1. burn_stacks = get_stacks(unit, Type.BURN)
-#   2. damage = burn_stacks * 1  (고정값, 스탯 비례 없음)
-#   3. unit.stats.strength -= damage
-#   4. unit.status[BURN] = max(0, burn_stacks - 1)  (감쇠 -1/턴)
+#   2. damage = burn_stacks × BURN_DAMAGE_PER_STACK  (고정값, 스탯 비례 없음)
+#   3. unit.take_str_damage(damage)  (temp 버퍼 우선 차감 — F1 갱신)
+#   4. unit.status[BURN] = max(0, burn_stacks - BURN_DECAY_PER_TURN)  (감쇠 -1/턴)
 #   5. return damage
 #
-# FROST / GUARD: 이번 슬라이스에서 아무 처리도 하지 않음 (no-op).
+# FROST / GUARD: 아무 처리도 하지 않음 (no-op).
 #
-# 중요: 사망 판정(strength <= 0 체크 및 유닛 제거)은 이 함수의 책임이 아님.
-#        호출자(grid_manager)가 반환값을 확인한 후 직접 사망 판정 수행.
+# 중요: 사망 판정은 이 함수의 책임이 아님 — 호출자(grid_manager)가 unit.is_alive() 체크 후 수행.
 static func tick_turn_start(unit: Unit) -> int:
 	var burn: int = get_stacks(unit, Type.BURN)
 	if burn == 0:
 		return 0
 	var damage: int = burn * BURN_DAMAGE_PER_STACK
-	unit.stats.strength = maxi(0, unit.stats.strength - damage)
+	unit.take_str_damage(damage)
 	unit.status[Type.BURN] = maxi(0, burn - BURN_DECAY_PER_TURN)
 	return damage

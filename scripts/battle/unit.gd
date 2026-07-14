@@ -19,9 +19,33 @@ var stats: UnitStats = null
 var grid_col: int = 0
 var grid_row: int = 0
 var is_moving: bool = false
-var status: Dictionary = {}     # StatusEffects.Type(int) → stack count
-var cards: Array[CardData] = [] # injected at placement; enemies always []
+var status: Dictionary = {}       # StatusEffects.Type(int) → stack count
+var cards: Array[CardData] = []   # injected at placement; enemies always []
 var roster_path: String = ""
+var temp_strength: int = 0        # battle-scoped temp STR; 0 at placement, discarded on battle end
+
+
+# Returns effective Strength = base stats.strength + temp_strength.
+# Used for both attack power (Combat.resolve_attack) and death check (is_alive).
+func effective_strength() -> int:
+	return stats.strength + temp_strength
+
+
+# Returns true if this unit is still alive (effective_strength > 0).
+# Use this instead of checking stats.strength <= 0 directly.
+func is_alive() -> bool:
+	return effective_strength() > 0
+
+
+# Apply STR damage, depleting temp_strength buffer first, then base stats.strength.
+# Per decisions_log "Temp STR depletion order". Does NOT check death — caller must call is_alive().
+func take_str_damage(amount: int) -> void:
+	if amount <= 0:
+		return
+	var from_temp := mini(temp_strength, amount)
+	temp_strength -= from_temp
+	var remaining := amount - from_temp
+	stats.strength = maxi(0, stats.strength - remaining)
 
 
 func _ready() -> void:
