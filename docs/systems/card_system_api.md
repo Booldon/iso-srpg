@@ -1,6 +1,6 @@
 # Card / Status-Effect System — API Contract
 
-**Version:** 1.2 (F2 — reactive defense: Flame Retort, Ember Barrier, Ashen Ward)
+**Version:** 1.3 (F3 — AoE spread + on-death transfer: Conflagration, Wildfire Storm, Ember Trace)
 **Date:** 2026-07-14  
 **Owner:** systems-designer  
 **Status:** Confirmed — implementation may begin
@@ -110,6 +110,30 @@ enum Tier { COMMON, RARE, EPIC }
 # 0이면 no-op. 처리 책임: grid_manager._apply_ashen_ward().
 # "인접" 정의: 맨해튼 거리 = 1 (상하좌우 4방향).
 @export var on_adjacent_ally_hit_burn_attacker: int = 0
+
+# --- AoE + on-death 전이 (F3 슬라이스 — 구현됨) ---
+# 이 카드를 보유한 유닛이 공격할 때 "splash 대상"(target + target에 인접한 살아있는 적)에 Burn을 부여 (Conflagration 스타일).
+# splash 대상 계산 책임: grid_manager._splash_targets(target).
+# 0이면 no-op.
+@export var on_attack_aoe_burn: int = 0
+
+# true이면 공격 시 splash 대상 각각의 Burn을 MAX_STACK까지 충전 (Wildfire Storm 1단계).
+# on_attack_aoe_burn과 독립적으로 작동 (둘 다 갖는 카드는 없지만 문법상 허용).
+# false이면 no-op.
+@export var on_attack_aoe_fill_max: bool = false
+
+# > 0이면 공격 시, fill_max/aoe_burn 처리 직후, Burn 스택이 남아있는 살아있는 적 **전체**에
+# 이 값만큼 방어 무시 STR 데미지 (Wildfire Storm 2단계).
+# "전체" 기준: grid_manager가 _living_enemies()로 전달하는 목록.
+# 0이면 no-op.
+@export var on_attack_aoe_burst_all_burning: int = 0
+
+# true이면 이 카드를 보유한 유닛이 있을 때, Burn 스택을 가진 적이 죽으면
+# 남은 스택의 절반(올림, ceili(stacks / 2.0))을 인접한 살아있는 적 하나에 전이한다 (Ember Trace 스타일).
+# 발동 조건: 사망 유닛의 Burn > 0 AND 인접 살아있는 적 존재 AND 보유자 존재.
+# 처리 책임: grid_manager._sweep_deaths() → CardEffects.transfer_burn_on_death().
+# false이면 no-op.
+@export var on_burn_kill_transfer_stacks: bool = false
 ```
 
 ### CardData 불변 규칙
@@ -292,13 +316,14 @@ class_name CardEffects
 # 순서 불변 규칙: [1] Burn 부여 → [2] Detonation. 같은 공격에서 Burn을 먼저 쌓고 detonation
 # 게이트를 체크하는 카드는 없다 (카드 설계상 분리). 순서 역전 금지.
 #
-# 호출 위치 (grid_manager._resolve_full_attack):
-#   var dmg_mult := CardEffects.get_incoming_multiplier(attacker, target)  ← F2 신규
-#   Combat.resolve_attack(attacker, target, hit_armor, dmg_mult)            ← F2 갱신
+# 호출 위치 (grid_manager._resolve_full_attack → _sweep_deaths):
+#   var dmg_mult := CardEffects.get_incoming_multiplier(attacker, target)
+#   Combat.resolve_attack(attacker, target, hit_armor, dmg_mult)
 #   CardEffects.apply_on_attack(attacker, target)
-#   CardEffects.apply_on_hit(attacker, target)                              ← F2 신규
-#   grid_manager._apply_ashen_ward(attacker, target)                        ← F2 신규 (grid_manager 내부)
-#   if not target.is_alive(): _kill_unit(target)
+#   CardEffects.apply_on_hit(attacker, target)
+#   grid_manager._apply_ashen_ward(attacker, target)
+#   CardEffects.apply_on_attack_aoe(attacker, _splash_targets(target), _living_enemies())  ← F3 신규
+#   grid_manager._sweep_deaths()  ← F3 신규 (단일 대상 is_alive() 체크 대체)
 static func apply_on_attack(attacker: Unit, target: Unit) -> void
 
 
@@ -327,6 +352,43 @@ static func get_incoming_multiplier(attacker: Unit, target: Unit) -> float
 # 적 유닛 cards == [] → 자동 no-op (player가 enemy를 칠 때 빈 루프).
 # 호출 위치: grid_manager._resolve_full_attack() 내부, apply_on_attack() 직후.
 static func apply_on_hit(attacker: Unit, target: Unit) -> void
+
+
+# 공격 시 AoE 효과를 적용한다 (F3 신규).
+#
+# splash_targets: target + target에 인접한 살아있는 적 전체.
+#   grid_manager._splash_targets(target)이 계산해서 전달.
+# all_enemies: 살아있는 적 전체 목록 (grid_manager._living_enemies()).
+#   burst_all_burning 계산에 사용 (fill_max 이후 갱신 필요 없음 — 같은 배열 참조).
+#
+# 처리 순서 (카드별, [A] → [B] → [C]):
+#   [A] on_attack_aoe_burn > 0: splash_targets 각각에 StatusEffects.add(BURN, card.on_attack_aoe_burn).
+#   [B] on_attack_aoe_fill_max: splash_targets 각각의 Burn을 MAX_STACK까지 충전.
+#       deficit = MAX_STACK - get_stacks(u, BURN); if deficit > 0: add(u, BURN, deficit).
+#   [C] on_attack_aoe_burst_all_burning > 0: [A][B] 처리 후 all_enemies 순회 →
+#       Burn 보유 유닛(get_stacks > 0)에 take_str_damage(card.on_attack_aoe_burst_all_burning) (방어 무시).
+#
+# 적 유닛은 cards == [] 이므로 자동 no-op (attacker가 적일 때).
+# 호출 위치: grid_manager._resolve_full_attack() 내부, apply_on_hit() 직후.
+static func apply_on_attack_aoe(attacker: Unit, splash_targets: Array[Unit], all_enemies: Array[Unit]) -> void
+
+
+# Ember Trace: 불붙은 상태로 사망한 유닛의 Burn 스택 일부를 인접 살아있는 적에게 전이한다 (F3 신규).
+#
+# 인수:
+#   dead_unit: 방금 사망 처리된 적 유닛 (_kill_unit 호출 전에 계산).
+#   adjacent_enemies: dead_unit에 인접한 살아있는 적 목록 (grid_manager._adjacent_enemies_of(dead_unit)).
+#   players: 살아있는 플레이어 유닛 목록 (grid_manager._living_players()).
+#
+# 발동 조건 (모두 충족 시에만):
+#   1. get_stacks(dead_unit, BURN) > 0
+#   2. adjacent_enemies가 비어 있지 않음
+#   3. players 중 하나라도 on_burn_kill_transfer_stacks == true 카드 보유
+#
+# 전이량: ceili(stacks / 2.0). 결정론적: adjacent_enemies[0] (방향 순서상 첫 번째).
+# 반환값: 없음 (void). 사망 판정/kill 처리는 호출자(grid_manager._sweep_deaths)의 책임.
+# 호출 위치: grid_manager._sweep_deaths() 내부, _kill_unit(dead_unit) 직전.
+static func transfer_burn_on_death(dead_unit: Unit, adjacent_enemies: Array[Unit], players: Array[Unit]) -> void
 ```
 
 ---
@@ -344,7 +406,7 @@ static func apply_on_hit(attacker: Unit, target: Unit) -> void
 | `scripts/battle/card_effects.gd` | combat-programmer | detonation 처리 추가 |
 | `scripts/battle/unit.gd` | combat-programmer | `temp_strength`, `effective_strength()`, `is_alive()`, `take_str_damage()` 추가 |
 | `scripts/battle/combat.gd` | combat-programmer | `effective_strength()` 사용, `take_str_damage()` 사용 |
-| `scripts/battle/grid_manager.gd` | combat-programmer | 사망 판정 `is_alive()` 통일, Solar 초기화, temp 초기화, `_resolve_full_attack()` / `_apply_ashen_ward()` 추가 (F2) |
+| `scripts/battle/grid_manager.gd` | combat-programmer | 사망 판정 `is_alive()` 통일, Solar 초기화, temp 초기화, `_resolve_full_attack()` / `_apply_ashen_ward()` (F2), `_sweep_deaths()` / `_splash_targets()` / `_living_enemies()` / `_living_players()` / `_adjacent_enemies_of()` (F3) |
 | `scenes/battle/*.tscn` | ui-programmer | 변경 없음 (F1) |
 | `scripts/battle/stats_panel.gd` | ui-programmer | temp STR 병기 표시 |
 | `docs/systems/card_system_api.md` | systems-designer | 이 문서 (계약 변경 시 먼저 여기 업데이트) |
@@ -379,7 +441,11 @@ static func apply_on_hit(attacker: Unit, target: Unit) -> void
 # on_hit_burn_attacker, on_hit_dmg_reduction_burning, on_adjacent_ally_hit_burn_attacker
 # (위 계약 A CardData 스키마 참고)
 
-# F3 AoE/on-death 슬라이스에서 추가 예정:
+# F3 AoE/on-death 슬라이스 — 구현 완료:
+# on_attack_aoe_burn, on_attack_aoe_fill_max, on_attack_aoe_burst_all_burning, on_burn_kill_transfer_stacks
+# (위 계약 A CardData 스키마 참고)
+
+# F4 틱 수정자 슬라이스에서 추가 예정:
 # (아래는 예약 필드 — 변경 가능)
 
 # F3 AoE/on-death 슬라이스에서 추가 예정:
