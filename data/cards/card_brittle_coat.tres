@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://fire_brtc_001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "brittle_coat"
+title = "물러진 갑옷"
+description = "적이 Burn 3스택 이상이면 유효 방어력이 2 감소 (스택 소비 없음, 지속)."
+element = 1
+tier = 1
+on_burn_threshold_armor_debuff = 2
+on_burn_threshold_armor_min = 3

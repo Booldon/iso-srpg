@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://fire_whth_001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "white_heat"
+title = "백열"
+description = "공격 시: 대상의 다음 Burn 틱 데미지 ×2 (이번 틱에만 적용 후 초기화)."
+element = 1
+tier = 1
+on_attack_burn_tick_multiplier = 2.0

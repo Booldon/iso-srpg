@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://fire_hdsn_001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "high_density"
+title = "고온 응축"
+description = "전투 시작 시 Burn 최대 누적량이 5에서 7로 증가."
+element = 1
+tier = 1
+on_attack_burn_max_override = 7
