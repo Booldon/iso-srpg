@@ -1,7 +1,7 @@
 # Card / Status-Effect System — API Contract
 
-**Version:** 1.3 (F3 — AoE spread + on-death transfer: Conflagration, Wildfire Storm, Ember Trace)
-**Date:** 2026-07-14  
+**Version:** 1.4 (F4 — Burn tick modifiers: White Heat, Smolder, High Density, Brittle Coat)
+**Date:** 2026-07-15  
 **Owner:** systems-designer  
 **Status:** Confirmed — implementation may begin
 
@@ -134,13 +134,38 @@ enum Tier { COMMON, RARE, EPIC }
 # 처리 책임: grid_manager._sweep_deaths() → CardEffects.transfer_burn_on_death().
 # false이면 no-op.
 @export var on_burn_kill_transfer_stacks: bool = false
+
+# --- F4 틱 수정자 (구현됨) ---
+# 아래 필드들은 attacker(공격자)의 카드에서 읽힌다 (on_attack_burn_max_override 제외).
+
+# White Heat: 공격 시 대상의 다음 Burn 틱 데미지에 곱할 배수. 틱 적용 후 즉시 1.0으로 리셋.
+# 1.0이면 no-op. 처리: apply_on_attack() [3] 블록 → target.burn_tick_mult_next = 이 값.
+@export var on_attack_burn_tick_multiplier: float = 1.0
+
+# Smolder: 공격 시 대상의 자연 Burn 감쇠를 2턴에 1회로 늦춤.
+# false이면 no-op. 처리: apply_on_attack() [3] 블록 → target.burn_decay_slowed = true.
+@export var on_attack_burn_decay_slow: bool = false
+
+# High Density: 보유 시 전투 시작 시 모든 유닛의 Burn 상한을 이 값으로 올림 (예: 7).
+# 0이면 no-op (기본 MAX_STACK=5 유지). on_attack이 아니라 전투 시작 시 grid_manager._setup_burn_caps()가 처리.
+# 여러 카드가 있으면 최댓값 적용.
+@export var on_attack_burn_max_override: int = 0
+
+# Brittle Coat: Burn 스택이 임계 이상인 적의 유효 AMR을 지속 차감하는 양 (예: 2).
+# 0이면 no-op. 처리 책임: grid_manager._refresh_burn_armor_debuffs() → enemy.burn_armor_debuff 갱신.
+# 스택 소비 없음. Combat.resolve_attack()의 strength-hit 경로가 target.effective_armor()를 사용해 반영.
+@export var on_burn_threshold_armor_debuff: int = 0
+
+# Brittle Coat 발동 최소 Burn 스택. get_stacks(enemy, BURN) >= 이 값이면 디버프 활성.
+# on_burn_threshold_armor_debuff == 0이면 이 값은 무시됨.
+@export var on_burn_threshold_armor_min: int = 3
 ```
 
 ### CardData 불변 규칙
 
 - 위 필드명·타입은 **절대 변경 불가**. 미래 슬라이스에서 필드를 **추가**하는 것만 허용.
 - `id`는 `.tres` 파일명 기반으로 결정. 예: `card_ember.tres` → `id = "ember"`.
-- 모든 int 필드의 기본값은 0, bool은 false. 기본값만 갖는 카드는 `CardEffects.apply_on_attack()`에서 자동 no-op 처리됨.
+- 모든 int 필드의 기본값은 0, bool은 false, float은 1.0 (no-op). 기본값만 갖는 카드는 자동 no-op 처리됨.
 
 ---
 
@@ -171,6 +196,26 @@ var cards: Array[CardData] = []
 # 피해 시 base stats.strength보다 먼저 차감됨 (decisions_log "Temp STR depletion order").
 var temp_strength: int = 0
 
+# ── 런타임 필드 (신규 — F4 슬라이스) ────────────────────────────────────────
+# High Density: 이 유닛의 Burn 스택 상한. 기본값 = StatusEffects.MAX_STACK(5).
+# grid_manager._setup_burn_caps()이 전투 시작 시 보유 카드에 따라 상향 (예: 7). .tres 저장 안 함.
+var burn_max: int = 5
+
+# White Heat: 다음 tick_turn_start()에서 Burn 데미지에 곱할 배수. 틱 후 즉시 1.0으로 리셋.
+# grid_manager._resolve_full_attack() → apply_on_attack() [3]이 설정. .tres 저장 안 함.
+var burn_tick_mult_next: float = 1.0
+
+# Smolder: 참이면 자연 Burn 감쇠가 2턴에 1회. apply_on_attack() [3]이 true로 설정.
+# 한 번 설정되면 전투 내내 유지(리셋 없음). .tres 저장 안 함.
+var burn_decay_slowed: bool = false
+
+# Smolder 내부 토글: 이번 턴 감쇠를 건너뜀 여부. tick_turn_start()가 관리.
+var _burn_decay_skip: bool = false
+
+# Brittle Coat: grid_manager._refresh_burn_armor_debuffs()가 갱신하는 현재 AMR 차감량.
+# Burn 임계 미달 시 0으로 복귀. 외부에서 직접 세팅 금지 — grid_manager만 갱신.
+var burn_armor_debuff: int = 0
+
 
 # ── 메서드 (신규 — F1 슬라이스) ─────────────────────────────────────────────
 # 현재 유효 Strength = stats.strength + temp_strength.
@@ -189,6 +234,13 @@ func is_alive() -> bool
 # 반환값: 없음(void). 사망 판정은 호출자(grid_manager / StatusEffects)의 책임.
 # 적용 대상: STR hit 공격, Burn 틱 데미지, detonation burst — 모두 이 함수 경유.
 func take_str_damage(amount: int) -> void
+
+# ── 메서드 (신규 — F4 슬라이스) ─────────────────────────────────────────────
+# 현재 유효 Armor = max(0, stats.armor - burn_armor_debuff).
+# Combat.resolve_attack()의 strength-hit 경로가 stats.armor 대신 이 값을 사용.
+# armor-hit(방어 차감 공격)는 base stats.armor를 직접 차감 (이 함수와 무관).
+# 읽기 전용 계산 — unit의 상태를 수정하지 않음.
+func effective_armor() -> int
 ```
 
 ### Unit 불변 규칙
@@ -197,6 +249,7 @@ func take_str_damage(amount: int) -> void
 - `unit.status`를 직접 수정하는 코드는 `StatusEffects.add()` / `StatusEffects.consume()` 내부에만 존재. 그 외 위치에서 `unit.status[key] = value` 작성 금지.
 - `cards` 배열은 배틀 외부에서 접근 금지.
 - `take_str_damage()`를 우회하여 `stats.strength`나 `temp_strength`를 외부에서 직접 감산 금지.
+- F4 신규 필드(`burn_max`, `burn_tick_mult_next`, `burn_decay_slowed`, `_burn_decay_skip`, `burn_armor_debuff`)는 배치 시 초기화, .tres 저장 안 함. `burn_armor_debuff`는 grid_manager만 갱신.
 
 ---
 
@@ -220,13 +273,14 @@ enum Type {
 	GUARD = 2    # AMR 증가 + 반격 (미구현, 예약됨)
 }
 
-# Burn 스택의 상한선. add() 호출 결과가 이 값을 초과하지 않도록 클램프.
-# High Density 카드(max 7)는 F4 슬라이스까지 보류 — 현재 5 고정.
+# Burn 스택의 기본 상한선. 비-BURN 타입(FROST, GUARD 등)의 클램프 기준.
+# BURN의 실제 상한은 unit.burn_max (기본값 = MAX_STACK; High Density 보유 시 7로 상향).
 const MAX_STACK: int = 5
 
 
 # unit.status[type] 에 amount 스택을 추가한다.
-# 결과 스택 수 = clamp(현재 + amount, 0, MAX_STACK).
+# BURN 타입: 결과 스택 수 = clamp(현재 + amount, 0, unit.burn_max).
+# 비-BURN 타입: 결과 스택 수 = clamp(현재 + amount, 0, MAX_STACK).
 # amount가 0 이하이면 no-op.
 # 호출자: CardEffects.apply_on_attack() 내부.
 static func add(unit: Unit, type: Type, amount: int) -> void
@@ -253,12 +307,19 @@ static func consume(unit: Unit, type: Type, amount: int) -> int
 
 # 해당 unit의 턴 시작 처리를 수행하고 실제 입힌 총 데미지를 반환한다.
 #
-# BURN 처리:
+# BURN 처리 (F4 갱신):
 #   1. burn_stacks = get_stacks(unit, Type.BURN)
-#   2. damage = burn_stacks × BURN_DAMAGE_PER_STACK  (고정값, 스탯 비례 없음)
-#   3. unit.take_str_damage(damage)  ← temp 버퍼 우선 차감 (F1 갱신)
-#   4. unit.status[BURN] = max(0, burn_stacks - BURN_DECAY_PER_TURN)  (감쇠 -1/턴)
-#   5. return damage
+#   2. damage = roundi(burn_stacks × BURN_DAMAGE_PER_STACK × unit.burn_tick_mult_next)
+#      (White Heat: burn_tick_mult_next = 2.0이면 틱 데미지 2배)
+#   3. unit.burn_tick_mult_next = 1.0  ← 틱 후 즉시 리셋
+#   4. unit.take_str_damage(damage)  ← temp 버퍼 우선 차감 (F1)
+#   5. 자연 감쇠 (F4 갱신):
+#      - unit.burn_decay_slowed == false: unit.status[BURN] = max(0, burn_stacks - BURN_DECAY_PER_TURN)  (매턴 -1)
+#      - unit.burn_decay_slowed == true (Smolder):
+#          if unit._burn_decay_skip:  감쇠 없이 skip = false로 전환
+#          else: unit.status[BURN] = max(0, burn_stacks - BURN_DECAY_PER_TURN); skip = true
+#          (→ 짝수 턴만 감쇠: 실질 감쇠 속도 절반)
+#   6. return damage
 #
 # FROST / GUARD: 아무 처리도 하지 않음 (no-op).
 #
@@ -304,8 +365,8 @@ class_name CardEffects
 #   a. 게이트 체크:
 #       - on_attack_min_burn > 0 이고 get_stacks(target, BURN) < on_attack_min_burn → 이 카드 스킵.
 #   b. 스택 소비:
-#       - on_attack_consume_all_burn == true → consumed = consume(target, BURN, MAX_INT)
-#           (MAX_INT 대신 get_stacks()값을 전달하는 것과 동일; 편의상 MAX_STACK을 상한으로 전달 가능)
+#       - on_attack_consume_all_burn == true → consumed = consume(target, BURN, get_stacks(target, BURN))
+#           ★ 버그 수정(F4): MAX_STACK(5) 대신 실제 현재 스택 수를 전달해야 High Density(7스택) 시 전량 소비됨.
 #       - 아니면 consumed = consume(target, BURN, card.on_attack_consume_burn)
 #   c. 버스트 데미지 계산:
 #       burst = consumed × card.on_attack_burst_per_stack + card.on_attack_burst_flat
@@ -313,8 +374,14 @@ class_name CardEffects
 #       if burst > 0: target.take_str_damage(burst)
 #       (armor를 무시 — Combat.resolve_attack()의 strength hit 경로와 달리 armor 차감 없음)
 #
-# 순서 불변 규칙: [1] Burn 부여 → [2] Detonation. 같은 공격에서 Burn을 먼저 쌓고 detonation
-# 게이트를 체크하는 카드는 없다 (카드 설계상 분리). 순서 역전 금지.
+# [3] F4 틱 수정자 (신규 — Burn 부여 [1] 이후, detonation [2] 이후에 처리):
+#   attacker.cards 순회:
+#   - on_attack_burn_tick_multiplier > 1.0: target.burn_tick_mult_next = card.on_attack_burn_tick_multiplier
+#     (같은 공격에 여러 White Heat류가 있으면 마지막 카드 값 적용 — 중복 불가 카드 설계 기준)
+#   - on_attack_burn_decay_slow == true: target.burn_decay_slowed = true
+#     (한 번 설정되면 전투 내내 유지 — 리셋 조건 없음)
+#
+# 순서 불변 규칙: [1] Burn 부여 → [2] Detonation → [3] 틱 수정자. 순서 역전 금지.
 #
 # 호출 위치 (grid_manager._resolve_full_attack → _sweep_deaths):
 #   var dmg_mult := CardEffects.get_incoming_multiplier(attacker, target)
@@ -322,8 +389,9 @@ class_name CardEffects
 #   CardEffects.apply_on_attack(attacker, target)
 #   CardEffects.apply_on_hit(attacker, target)
 #   grid_manager._apply_ashen_ward(attacker, target)
-#   CardEffects.apply_on_attack_aoe(attacker, _splash_targets(target), _living_enemies())  ← F3 신규
-#   grid_manager._sweep_deaths()  ← F3 신규 (단일 대상 is_alive() 체크 대체)
+#   CardEffects.apply_on_attack_aoe(attacker, _splash_targets(target), _living_enemies())
+#   grid_manager._refresh_burn_armor_debuffs()  ← F4 신규
+#   grid_manager._sweep_deaths()
 static func apply_on_attack(attacker: Unit, target: Unit) -> void
 
 
@@ -363,8 +431,9 @@ static func apply_on_hit(attacker: Unit, target: Unit) -> void
 #
 # 처리 순서 (카드별, [A] → [B] → [C]):
 #   [A] on_attack_aoe_burn > 0: splash_targets 각각에 StatusEffects.add(BURN, card.on_attack_aoe_burn).
-#   [B] on_attack_aoe_fill_max: splash_targets 각각의 Burn을 MAX_STACK까지 충전.
-#       deficit = MAX_STACK - get_stacks(u, BURN); if deficit > 0: add(u, BURN, deficit).
+#   [B] on_attack_aoe_fill_max: splash_targets 각각의 Burn을 unit.burn_max까지 충전.
+#       deficit = u.burn_max - get_stacks(u, BURN); if deficit > 0: add(u, BURN, deficit).
+#       ★ F4 갱신: MAX_STACK → u.burn_max (High Density 보유 시 7까지 충전).
 #   [C] on_attack_aoe_burst_all_burning > 0: [A][B] 처리 후 all_enemies 순회 →
 #       Burn 보유 유닛(get_stacks > 0)에 take_str_damage(card.on_attack_aoe_burst_all_burning) (방어 무시).
 #
@@ -393,6 +462,45 @@ static func transfer_burn_on_death(dead_unit: Unit, adjacent_enemies: Array[Unit
 
 ---
 
+## 계약 E — Combat 데미지 계산 (F4 갱신)
+
+**파일 위치:** `scripts/battle/combat.gd` (combat-programmer 소유)
+
+```gdscript
+# resolve_attack의 strength-hit 경로가 F4부터 target.effective_armor()를 사용한다.
+#
+# Strength hit (hit_armor == false):
+#   var dmg := maxi(0, attacker.effective_strength() - target.effective_armor())  ← F4: stats.armor → effective_armor()
+#   target.take_str_damage(roundi(dmg * dmg_mult))
+#
+# Armor hit (hit_armor == true):
+#   if not target.stats.armor_reduction_immune:
+#       target.stats.armor = maxi(0, target.stats.armor - roundi(attacker.effective_strength() * dmg_mult))
+#   (armor-hit는 base stats.armor를 직접 차감 — effective_armor()와 무관)
+```
+
+---
+
+## grid_manager F4 신규 함수 (combat-programmer 소유)
+
+```gdscript
+# 전투 시작 시 1회 호출 (배치 완료 직후).
+# 플레이어 카드 중 on_attack_burn_max_override > 0인 최댓값을 구해,
+# get_all_units() 전체 유닛의 burn_max를 그 값으로 세팅.
+# 보유자 없으면 no-op (burn_max 기본값 5 유지).
+func _setup_burn_caps() -> void
+
+# Burn 스택 변동 후(공격 완료, 틱 처리 후) 호출해 Brittle Coat 디버프를 갱신한다.
+# 플레이어 카드의 on_burn_threshold_armor_debuff 합산 → 각 적에 대해:
+#   if get_stacks(enemy, BURN) >= card.on_burn_threshold_armor_min:
+#       enemy.burn_armor_debuff += card.on_burn_threshold_armor_debuff
+#   else: enemy.burn_armor_debuff = 0
+# 호출 위치: _resolve_full_attack() 끝, _on_turn_started() 틱 처리 후.
+func _refresh_burn_armor_debuffs() -> void
+```
+
+---
+
 ## 파일 소유권 매트릭스
 
 한 파일은 정확히 한 에이전트만 소유한다.
@@ -400,15 +508,15 @@ static func transfer_burn_on_death(dead_unit: Unit, adjacent_enemies: Array[Unit
 
 | 파일 | 소유 에이전트 | 상태 |
 |---|---|---|
-| `scripts/data/card_data.gd` | combat-programmer | F1 필드 추가 |
-| `data/cards/*.tres` | data-balancer | F1 카드 4장 추가 |
-| `scripts/battle/status_effects.gd` | combat-programmer | `consume()` 신규, `tick_turn_start()` temp 갱신 |
-| `scripts/battle/card_effects.gd` | combat-programmer | detonation 처리 추가 |
-| `scripts/battle/unit.gd` | combat-programmer | `temp_strength`, `effective_strength()`, `is_alive()`, `take_str_damage()` 추가 |
-| `scripts/battle/combat.gd` | combat-programmer | `effective_strength()` 사용, `take_str_damage()` 사용 |
-| `scripts/battle/grid_manager.gd` | combat-programmer | 사망 판정 `is_alive()` 통일, Solar 초기화, temp 초기화, `_resolve_full_attack()` / `_apply_ashen_ward()` (F2), `_sweep_deaths()` / `_splash_targets()` / `_living_enemies()` / `_living_players()` / `_adjacent_enemies_of()` (F3) |
-| `scenes/battle/*.tscn` | ui-programmer | 변경 없음 (F1) |
-| `scripts/battle/stats_panel.gd` | ui-programmer | temp STR 병기 표시 |
+| `scripts/data/card_data.gd` | combat-programmer | F4: `on_attack_burn_tick_multiplier`, `on_attack_burn_decay_slow`, `on_attack_burn_max_override`, `on_burn_threshold_armor_debuff`, `on_burn_threshold_armor_min` 추가 |
+| `data/cards/*.tres` | data-balancer | F4: `card_white_heat`, `card_smolder`, `card_high_density`, `card_brittle_coat` 추가 |
+| `scripts/battle/status_effects.gd` | combat-programmer | F4: `add()` BURN 상한 `unit.burn_max` 사용, `tick_turn_start()` 배수·감쇠 지연 갱신 |
+| `scripts/battle/card_effects.gd` | combat-programmer | F4: `apply_on_attack()` [3] 틱 수정자 블록 추가, detonation consume-all 버그 수정, aoe fill_max `unit.burn_max` 기준 갱신 |
+| `scripts/battle/unit.gd` | combat-programmer | F4: `burn_max`, `burn_tick_mult_next`, `burn_decay_slowed`, `_burn_decay_skip`, `burn_armor_debuff` 필드, `effective_armor()` 추가 |
+| `scripts/battle/combat.gd` | combat-programmer | F4: strength-hit 경로가 `target.effective_armor()` 사용으로 갱신 |
+| `scripts/battle/grid_manager.gd` | combat-programmer | F4: `_setup_burn_caps()`, `_refresh_burn_armor_debuffs()` 추가; `_resolve_full_attack()` 끝·턴 시작 후 디버프 갱신 호출 추가 |
+| `scenes/battle/*.tscn` | ui-programmer | 변경 없음 |
+| `scripts/battle/stats_panel.gd` | ui-programmer | F4: AMR 표시에 `burn_armor_debuff` 병기 (예: `ARM  3 (-2)`) |
 | `docs/systems/card_system_api.md` | systems-designer | 이 문서 (계약 변경 시 먼저 여기 업데이트) |
 
 ---
@@ -422,42 +530,26 @@ static func transfer_burn_on_death(dead_unit: Unit, adjacent_enemies: Array[Unit
 | Burn 틱 데미지 | `stacks × 1` STR (고정값) | 스탯 비례 없음 — decisions_log.md "Stack-based damage formulas" |
 | Burn 자연 감쇠 | 턴당 -1 스택 (0 클램프) | 무한 DoT 스노볼 방지 — decisions_log.md "Per-element stack decay rules" |
 | Frost / Guard 자연 감쇠 | 없음 (감쇠 없음) | Burn만 직접 데미지; 나머지 둘은 DoT 아님 |
-| Kindling 규칙 | 대상 Burn = 0이면 0 적용 | 증폭 전용 카드, from-scratch 적용 불가 |
-| 최대 스택 수 | 5 | High Density(max 7) 확장은 F4 슬라이스까지 보류 |
+| Kindling 규칙 | 대상 Burn = 0이면 on_attack_burn 미적용 | 증폭 전용 카드, from-scratch 적용 불가 |
+| 기본 최대 스택 수 | 5 (MAX_STACK 상수) | High Density 보유 시 unit.burn_max = 7로 상향 (F4 구현됨) |
+| Burn 틱 데미지 | `roundi(stacks × 1 × burn_tick_mult_next)` STR (고정값) | White Heat 배수 포함; 스탯 비례 없음 |
 | RNG | 없음 | 완전 결정론적 — decisions_log.md "Combat resolution stays fully deterministic" |
 | temp STR 성격 | 공격력·HP 양쪽 적용 (effective_strength()) | 단일 스탯 원칙 유지, Fire=버스트 정체성 강화 |
 | temp STR 차감 순서 | temp 버퍼 먼저, 이후 base STR | decisions_log.md "Temp STR depletion order" |
 | detonation 데미지 | 방어 무시 (armor 차감 없음) | 폭발 = 관통 페이오프 |
+| strength-hit 유효 방어 | `target.effective_armor()` = `max(0, armor - burn_armor_debuff)` | Brittle Coat 지속 디버프 반영 (F4) |
 | 사망 판정 책임 | grid_manager (`tick_turn_start` / `apply_on_attack` 호출 후 `is_alive()` 체크) | StatusEffects / CardEffects는 stats만 수정 |
 
 ---
 
 ## 미래 확장 계약 (예약 공간 — 현재 슬라이스에서 구현하지 않음)
 
-### CardData에 추가될 필드 (예상)
+구현 완료 슬라이스: F1(detonation+temp STR+Solar), F2(반응형 방어), F3(AoE+on-death 전이), F4(틱 수정자).
+→ 해당 필드는 모두 계약 A CardData 스키마 참고.
+
+### CardData에 추가될 필드 (예상 — Guard 슬라이스)
 
 ```gdscript
-# F2 반응형 방어 슬라이스 — 구현 완료:
-# on_hit_burn_attacker, on_hit_dmg_reduction_burning, on_adjacent_ally_hit_burn_attacker
-# (위 계약 A CardData 스키마 참고)
-
-# F3 AoE/on-death 슬라이스 — 구현 완료:
-# on_attack_aoe_burn, on_attack_aoe_fill_max, on_attack_aoe_burst_all_burning, on_burn_kill_transfer_stacks
-# (위 계약 A CardData 스키마 참고)
-
-# F4 틱 수정자 슬라이스에서 추가 예정:
-# (아래는 예약 필드 — 변경 가능)
-
-# F3 AoE/on-death 슬라이스에서 추가 예정:
-@export var on_attack_aoe_burn: int = 0       # 공격 시 인접 적 전체 Burn 부여 (Conflagration)
-@export var on_burn_kill_transfer_stacks: bool = false  # Burn으로 처치 시 스택 전이 (Ember Trace)
-
-# F4 틱 수정자 슬라이스에서 추가 예정:
-@export var on_attack_burn_tick_multiplier: float = 1.0  # White Heat (그 턴 틱 데미지 ×2)
-@export var on_attack_burn_decay_slow: bool = false      # Smolder (감쇠 2턴에 1회)
-@export var on_attack_burn_max_override: int = 0         # High Density (MAX_STACK을 7로)
-@export var on_burn_threshold_armor_debuff: int = 0      # Brittle Coat (Burn≥3 → AMR-2)
-
 # Guard 슬라이스에서 추가 예정:
 @export var on_hit_guard: int = 0
 @export var on_hit_counter_damage_multiplier: float = 1.0
