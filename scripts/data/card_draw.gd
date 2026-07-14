@@ -54,6 +54,9 @@ static func eligible(
 	for card in pool:
 		if card.tier != tier:
 			continue
+		# 이미 보유한 카드는 후보에서 제외
+		if card.id in owned_ids:
+			continue
 		# Epic 조건 게이팅: prerequisite_card_ids가 비어있지 않으면 모두 보유해야 통과
 		if tier == CardData.Tier.EPIC and not card.prerequisite_card_ids.is_empty():
 			var all_met: bool = true
