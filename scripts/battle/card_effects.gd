@@ -53,3 +53,22 @@ static func apply_on_attack(attacker: Unit, target: Unit) -> void:
 		var burst: int = consumed * card.on_attack_burst_per_stack + card.on_attack_burst_flat
 		if burst > 0:
 			target.take_str_damage(burst)
+
+
+# target의 cards에서 on_hit_dmg_reduction_burning 을 집계해 피해 배율을 반환한다 (F2).
+# 반환값: float (1.0 = 감소 없음). Combat.resolve_attack(dmg_mult) 에 전달.
+static func get_incoming_multiplier(attacker: Unit, target: Unit) -> float:
+	var mult := 1.0
+	for card: CardData in target.cards:
+		if card.on_hit_dmg_reduction_burning > 0.0:
+			if StatusEffects.get_stacks(attacker, StatusEffects.Type.BURN) > 0:
+				mult *= (1.0 - card.on_hit_dmg_reduction_burning)
+	return mult
+
+
+# target의 cards에서 on_hit_burn_attacker 를 집계해 attacker에 Burn을 부여한다 (F2).
+# 적 유닛은 cards == [] 이므로 자동 no-op.
+static func apply_on_hit(attacker: Unit, target: Unit) -> void:
+	for card: CardData in target.cards:
+		if card.on_hit_burn_attacker > 0:
+			StatusEffects.add(attacker, StatusEffects.Type.BURN, card.on_hit_burn_attacker)

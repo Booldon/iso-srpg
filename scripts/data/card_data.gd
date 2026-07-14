@@ -49,3 +49,19 @@ enum Tier { COMMON, RARE, EPIC }
 @export var battle_start_armor_bonus: int = 0
 @export var battle_start_spd_bonus:   int = 0
 @export var battle_start_move_bonus:  int = 0
+
+# --- 피격 반응 효과 (F2 슬라이스 — 구현됨) ---
+# 이 카드를 보유한 유닛이 맞을 때 발동. target(피격자)의 cards에서 읽힘.
+# 공격 직후 CardEffects.apply_on_hit() / get_incoming_multiplier() 에서 처리.
+
+# 피격 시 공격자에게 Burn 부여. 0 = no-op. (Flame Retort: 2)
+@export var on_hit_burn_attacker: int = 0
+
+# 피격 시 공격자가 Burn 상태이면 받는 피해 감소 비율 (0.0~1.0). 0.3 = 30% 감소.
+# get_incoming_multiplier()가 곱셈적으로 합산 → Combat.resolve_attack(dmg_mult)에 전달.
+# 0.0 = no-op. (Ember Barrier: 0.3)
+@export var on_hit_dmg_reduction_burning: float = 0.0
+
+# 이 카드를 보유한 유닛에 인접한 아군이 피격될 때, 그 공격자에게 Burn 부여.
+# 0 = no-op. 처리 책임: grid_manager._apply_ashen_ward(). (Ashen Ward: 2)
+@export var on_adjacent_ally_hit_burn_attacker: int = 0

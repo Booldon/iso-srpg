@@ -120,8 +120,7 @@ func _execute_player_attack(hit_armor: bool) -> void:
 	_clear_move_range()
 	var attacker := _turn_manager.current_unit()
 	attacker.face_toward_pos(_pending_target.position)
-	Combat.resolve_attack(attacker, _pending_target, hit_armor)
-	CardEffects.apply_on_attack(attacker, _pending_target)
+	_resolve_full_attack(attacker, _pending_target, hit_armor)
 	if not _pending_target.is_alive():
 		_kill_unit(_pending_target)
 		_check_battle_end()
@@ -155,8 +154,7 @@ func _run_enemy_turn(unit: Unit) -> void:
 		else:
 			hit_armor = not target.stats.armor_reduction_immune  # hit Armor only if target is not immune
 		unit.face_toward_pos(target.position)
-		Combat.resolve_attack(unit, target, hit_armor)
-		CardEffects.apply_on_attack(unit, target)
+		_resolve_full_attack(unit, target, hit_armor)
 		if not target.is_alive():
 			_kill_unit(target)
 			_check_battle_end()
@@ -179,6 +177,34 @@ func _run_enemy_turn(unit: Unit) -> void:
 				_move_unit(unit, best_cell)
 				await unit.move_along_path(path)
 	_turn_manager.end_turn()
+
+
+func _resolve_full_attack(attacker: Unit, target: Unit, hit_armor: bool) -> void:
+	var dmg_mult := CardEffects.get_incoming_multiplier(attacker, target)
+	Combat.resolve_attack(attacker, target, hit_armor, dmg_mult)
+	CardEffects.apply_on_attack(attacker, target)
+	CardEffects.apply_on_hit(attacker, target)
+	_apply_ashen_ward(attacker, target)
+
+
+# Ashen Ward: target(피격된 아군)에 인접한 다른 플레이어 유닛이 보유한
+# on_adjacent_ally_hit_burn_attacker 스택만큼 공격자에게 Burn을 부여한다.
+# target이 플레이어 유닛일 때만 발동 (적이 맞을 때는 no-op).
+func _apply_ashen_ward(attacker: Unit, target: Unit) -> void:
+	if not target.is_player:
+		return
+	var target_cell := Vector2i(target.grid_col, target.grid_row)
+	for unit: Unit in _turn_manager.get_all_units():
+		if not unit.is_player or unit == target:
+			continue
+		var burn_amt := 0
+		for card: CardData in unit.cards:
+			burn_amt += card.on_adjacent_ally_hit_burn_attacker
+		if burn_amt <= 0:
+			continue
+		var unit_cell := Vector2i(unit.grid_col, unit.grid_row)
+		if absi(unit_cell.x - target_cell.x) + absi(unit_cell.y - target_cell.y) == 1:
+			StatusEffects.add(attacker, StatusEffects.Type.BURN, burn_amt)
 
 
 func _move_unit(unit: Unit, cell: Vector2i) -> void:

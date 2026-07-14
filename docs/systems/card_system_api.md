@@ -1,6 +1,6 @@
 # Card / Status-Effect System — API Contract
 
-**Version:** 1.1 (F1 — detonation + temp STR)
+**Version:** 1.2 (F2 — reactive defense: Flame Retort, Ember Barrier, Ashen Ward)
 **Date:** 2026-07-14  
 **Owner:** systems-designer  
 **Status:** Confirmed — implementation may begin
@@ -91,6 +91,25 @@ enum Tier { COMMON, RARE, EPIC }
 @export var battle_start_armor_bonus: int = 0
 @export var battle_start_spd_bonus:   int = 0
 @export var battle_start_move_bonus:  int = 0
+
+# --- 피격 반응 효과 (F2 슬라이스 — 구현됨) ---
+# 아래 필드는 target(피격자)의 카드에서 읽힌다.
+# 공격 직후 CardEffects.apply_on_hit(attacker, target) / get_incoming_multiplier(attacker, target) 에서 처리.
+
+# 피격 시 공격자(attacker)에게 Burn을 부여한다 (Flame Retort 스타일).
+# 0이면 no-op. 적 유닛은 cards == [] 이므로 자동 no-op.
+@export var on_hit_burn_attacker: int = 0
+
+# 피격 시 공격자(attacker)가 Burn 상태이면 받는 피해를 감소시킨다 (Ember Barrier 스타일).
+# 값은 감소 비율 (0.0 ~ 1.0). 0.3 = 30% 감소 (dmg × 0.7). 곱셈적 합산.
+# get_incoming_multiplier()가 반환하는 float 값이 Combat.resolve_attack(dmg_mult)에 전달됨.
+# 0.0이면 no-op.
+@export var on_hit_dmg_reduction_burning: float = 0.0
+
+# 이 유닛의 인접 아군(player unit)이 피격될 때 그 공격자(attacker)에게 Burn을 부여한다 (Ashen Ward 스타일).
+# 0이면 no-op. 처리 책임: grid_manager._apply_ashen_ward().
+# "인접" 정의: 맨해튼 거리 = 1 (상하좌우 4방향).
+@export var on_adjacent_ally_hit_burn_attacker: int = 0
 ```
 
 ### CardData 불변 규칙
@@ -273,11 +292,41 @@ class_name CardEffects
 # 순서 불변 규칙: [1] Burn 부여 → [2] Detonation. 같은 공격에서 Burn을 먼저 쌓고 detonation
 # 게이트를 체크하는 카드는 없다 (카드 설계상 분리). 순서 역전 금지.
 #
-# 호출 위치 (grid_manager):
-#   Combat.resolve_attack(attacker, target, hit_armor)  ← 기존 호출
-#   CardEffects.apply_on_attack(attacker, target)       ← 이 함수
-#   if not target.is_alive(): _kill_unit(target)        ← F1 갱신된 사망 판정
+# 호출 위치 (grid_manager._resolve_full_attack):
+#   var dmg_mult := CardEffects.get_incoming_multiplier(attacker, target)  ← F2 신규
+#   Combat.resolve_attack(attacker, target, hit_armor, dmg_mult)            ← F2 갱신
+#   CardEffects.apply_on_attack(attacker, target)
+#   CardEffects.apply_on_hit(attacker, target)                              ← F2 신규
+#   grid_manager._apply_ashen_ward(attacker, target)                        ← F2 신규 (grid_manager 내부)
+#   if not target.is_alive(): _kill_unit(target)
 static func apply_on_attack(attacker: Unit, target: Unit) -> void
+
+
+# target의 cards에서 on_hit_dmg_reduction_burning > 0.0인 것을 집계해
+# Combat.resolve_attack()에 전달할 피해 배율을 반환한다 (F2 신규).
+#
+# 계산:
+#   mult = 1.0
+#   target.cards 순회: on_hit_dmg_reduction_burning > 0.0인 카드마다,
+#     if StatusEffects.get_stacks(attacker, BURN) > 0: mult *= (1.0 - card.on_hit_dmg_reduction_burning)
+#   return mult
+#
+# 반환값: float (1.0 = 감소 없음, 0.7 = 30% 감소).
+# 여러 Ember Barrier 중첩 시 곱셈 합산 (1.0 × 0.7 × 0.7 = 0.49).
+# 적 유닛 카드 없음(cards==[]) → 항상 1.0 반환.
+# 호출 위치: grid_manager._resolve_full_attack() 내부, Combat.resolve_attack() 직전.
+static func get_incoming_multiplier(attacker: Unit, target: Unit) -> float
+
+
+# target의 cards에서 on_hit_burn_attacker > 0인 것을 집계해 attacker에게 Burn을 부여한다 (F2 신규).
+#
+# 처리:
+#   target.cards 순회: on_hit_burn_attacker > 0인 카드마다
+#     StatusEffects.add(attacker, Type.BURN, card.on_hit_burn_attacker)
+#
+# 적 유닛 cards == [] → 자동 no-op (player가 enemy를 칠 때 빈 루프).
+# 호출 위치: grid_manager._resolve_full_attack() 내부, apply_on_attack() 직후.
+static func apply_on_hit(attacker: Unit, target: Unit) -> void
 ```
 
 ---
@@ -295,7 +344,7 @@ static func apply_on_attack(attacker: Unit, target: Unit) -> void
 | `scripts/battle/card_effects.gd` | combat-programmer | detonation 처리 추가 |
 | `scripts/battle/unit.gd` | combat-programmer | `temp_strength`, `effective_strength()`, `is_alive()`, `take_str_damage()` 추가 |
 | `scripts/battle/combat.gd` | combat-programmer | `effective_strength()` 사용, `take_str_damage()` 사용 |
-| `scripts/battle/grid_manager.gd` | combat-programmer | 사망 판정 `is_alive()` 통일, Solar 초기화, temp 초기화 |
+| `scripts/battle/grid_manager.gd` | combat-programmer | 사망 판정 `is_alive()` 통일, Solar 초기화, temp 초기화, `_resolve_full_attack()` / `_apply_ashen_ward()` 추가 (F2) |
 | `scenes/battle/*.tscn` | ui-programmer | 변경 없음 (F1) |
 | `scripts/battle/stats_panel.gd` | ui-programmer | temp STR 병기 표시 |
 | `docs/systems/card_system_api.md` | systems-designer | 이 문서 (계약 변경 시 먼저 여기 업데이트) |
@@ -326,9 +375,12 @@ static func apply_on_attack(attacker: Unit, target: Unit) -> void
 ### CardData에 추가될 필드 (예상)
 
 ```gdscript
-# F2 반응형 방어 슬라이스에서 추가 예정:
-@export var on_hit_burn_attacker: int = 0     # 피격 시 공격자에게 Burn 부여 (Flame Retort)
-@export var on_hit_damage_reduction_if_target_burning: float = 0.0  # Ember Barrier
+# F2 반응형 방어 슬라이스 — 구현 완료:
+# on_hit_burn_attacker, on_hit_dmg_reduction_burning, on_adjacent_ally_hit_burn_attacker
+# (위 계약 A CardData 스키마 참고)
+
+# F3 AoE/on-death 슬라이스에서 추가 예정:
+# (아래는 예약 필드 — 변경 가능)
 
 # F3 AoE/on-death 슬라이스에서 추가 예정:
 @export var on_attack_aoe_burn: int = 0       # 공격 시 인접 적 전체 Burn 부여 (Conflagration)

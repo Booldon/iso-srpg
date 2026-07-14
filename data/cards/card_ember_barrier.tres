@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://fire_ebrr_001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "ember_barrier"
+title = "화염 방벽"
+description = "피격 시, 공격자가 Burn 상태이면: 받는 피해 -30%."
+element = 1
+tier = 1
+on_hit_dmg_reduction_burning = 0.3
