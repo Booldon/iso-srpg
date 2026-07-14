@@ -1,7 +1,7 @@
 # Card / Status-Effect System — API Contract
 
-**Version:** 1.0  
-**Date:** 2026-07-13  
+**Version:** 1.1 (F1 — detonation + temp STR)
+**Date:** 2026-07-14  
 **Owner:** systems-designer  
 **Status:** Confirmed — implementation may begin
 
@@ -14,7 +14,7 @@
 
 ## 계약 A — CardData Resource 스키마
 
-**파일 위치:** `scripts/data/card_data.gd` (combat-programmer 생성)  
+**파일 위치:** `scripts/data/card_data.gd` (combat-programmer 소유)  
 **소비자:**
 - data-balancer: 이 스키마를 기반으로 `data/cards/*.tres` 파일 작성
 - combat-programmer: `CardEffects` 구현 시 필드 읽기
@@ -36,59 +36,116 @@ enum Tier { COMMON, RARE, EPIC }
 @export var element: Element = Element.FIRE
 @export var tier: Tier = Tier.RARE
 
-# --- 공격 시 Burn 효과 ---
+# --- 에픽 전제조건 ---
+# 비어있으면 조건없는 에픽(Epic 롤 시 항상 후보).
+# 채워져 있으면 이 id들의 카드를 모두 보유해야 카드 풀에 등장. (tier가 EPIC일 때만 체크됨)
+@export var prerequisite_card_ids: Array[String] = []
+
+# --- 공격 시 Burn 부여 (Burn 슬라이스 — 구현됨) ---
 # 일반 공격(resolve_attack) 직후 CardEffects.apply_on_attack()이 읽는 필드.
 @export var on_attack_burn: int = 0
 # true이면 대상의 Burn 스택이 0일 때 이 카드의 on_attack_burn을 적용하지 않음 (Kindling 규칙).
 # false이면 대상의 Burn 스택과 무관하게 항상 적용.
 @export var on_attack_burn_requires_burning: bool = false
+
+# --- Detonation / burst 효과 (F1 슬라이스 — 구현됨) ---
+# 게이트: 대상 Burn 스택이 on_attack_min_burn 이상일 때만 아래 detonation 필드가 발동.
+# 0이면 게이트 없음 (항상 적용).
+@export var on_attack_min_burn: int = 0
+
+# 대상 Burn 스택 소비 수. 0이면 소비 없음.
+# on_attack_consume_all_burn이 true면 이 값은 무시됨.
+@export var on_attack_consume_burn: int = 0
+
+# true이면 대상 Burn 스택을 전량 소비 (Grand Detonation 스타일).
+# false이면 on_attack_consume_burn 수만큼 소비.
+@export var on_attack_consume_all_burn: bool = false
+
+# 소비한 스택 1개당 방어 무시 STR 데미지.
+# 소비가 없는 경우(consume = 0, consume_all = false)에는 0 사용.
+@export var on_attack_burst_per_stack: int = 0
+
+# 스택 소비 없이 고정으로 방어 무시 보너스 데미지 (Overheat형).
+# on_attack_min_burn 게이트를 통과했을 때만 발동.
+# 소비 효과(consume)와 동시에 가질 수 있음.
+@export var on_attack_burst_flat: int = 0
+
+# --- Solar / temp STR 효과 (F1 슬라이스 — 구현됨) ---
+# 전투 시작 시(배치 직후) 이 카드를 보유한 유닛 자신에게 부여하는 임시 Strength.
+# 0이면 효과 없음.
+@export var battle_start_temp_str_self: int = 0
 ```
 
 ### CardData 불변 규칙
 
 - 위 필드명·타입은 **절대 변경 불가**. 미래 슬라이스에서 필드를 **추가**하는 것만 허용.
 - `id`는 `.tres` 파일명 기반으로 결정. 예: `card_ember.tres` → `id = "ember"`.
-- `on_attack_burn = 0`이고 향후 추가 필드도 모두 0/false인 카드는 `CardEffects.apply_on_attack()`에서 자동으로 no-op 처리됨.
+- 모든 int 필드의 기본값은 0, bool은 false. 기본값만 갖는 카드는 `CardEffects.apply_on_attack()`에서 자동 no-op 처리됨.
 
 ---
 
-## 계약 B — Unit 런타임 필드
+## 계약 B — Unit 런타임 필드 및 메서드
 
-**파일 위치:** `scripts/battle/unit.gd` (combat-programmer가 기존 Unit 클래스에 추가)  
+**파일 위치:** `scripts/battle/unit.gd` (combat-programmer 소유)  
 **소비자:**
-- combat-programmer: `StatusEffects`, `CardEffects` 호출 시 인자로 전달
-- ui-programmer: `unit.status` 딕셔너리를 `StatusEffects.get_stacks()` 경유로 읽음 (직접 접근 금지)
-- data-balancer: 이 필드를 직접 건드리지 않음
+- combat-programmer: `StatusEffects`, `CardEffects`, `Combat` 호출 시 인자·메서드로 사용
+- ui-programmer: `unit.status` 딕셔너리를 `StatusEffects.get_stacks()` 경유로 읽음 (직접 접근 금지).
+  `unit.effective_strength()`으로 현재 유효 STR 조회 가능 (UI 표시용).
+- data-balancer: 이 필드/메서드를 직접 건드리지 않음
 
 ```gdscript
-# 기존 Unit 클래스에 추가되는 두 필드:
-
+# ── 런타임 필드 (기존 — Burn 슬라이스에서 추가됨) ──────────────────────────
 # unit이 현재 보유한 상태이상 스택 수.
 # 키: StatusEffects.Type(int), 값: 스택 수(int).
-# 배틀 시작 시(grid_manager._place_players / _place_enemies) 반드시 빈 딕셔너리로 초기화.
-# 직접 읽기 금지 — 반드시 StatusEffects.get_stacks()를 통해 접근.
+# 배치 시 빈 딕셔너리로 초기화. 직접 읽기 금지 — StatusEffects.get_stacks() 경유 필수.
 var status: Dictionary = {}
 
 # 배치 시 grid_manager가 주입하는 카드 목록.
-# 플레이어 유닛: GameState에서 로드한 해당 유닛의 보유 카드 Array.
-# 적 유닛: 항상 빈 배열 [] (적은 카드를 사용하지 않음).
-# 런타임 전용 — .tres(UnitStats)에 저장하지 않음.
+# 플레이어 유닛: GameState.active_cards 기반. 적 유닛: 항상 [].
+# 런타임 전용 — UnitStats(.tres)에 저장하지 않음.
 var cards: Array[CardData] = []
+
+# ── 런타임 필드 (신규 — F1 슬라이스) ────────────────────────────────────────
+# 이번 전투에만 유효한 임시 Strength (Solar/힐 카드가 부여).
+# 배치 시 0으로 초기화. 전투 종료 후 폐기 (영구 저장하지 않음).
+# 피해 시 base stats.strength보다 먼저 차감됨 (decisions_log "Temp STR depletion order").
+var temp_strength: int = 0
+
+
+# ── 메서드 (신규 — F1 슬라이스) ─────────────────────────────────────────────
+# 현재 유효 Strength = stats.strength + temp_strength.
+# 공격력 계산(Combat.resolve_attack)과 사망 판정(grid_manager) 양쪽에서 이 값을 사용.
+# 읽기 전용 계산 — unit의 상태를 수정하지 않음.
+func effective_strength() -> int
+
+# 이 유닛이 생존 중인지 반환. effective_strength() > 0 이면 생존.
+# grid_manager의 사망 판정을 unit.stats.strength <= 0 대신 이 함수로 교체.
+func is_alive() -> bool
+
+# Strength 피해를 temp 버퍼 우선으로 차감한다.
+#   1. from_temp = min(temp_strength, amount)
+#   2. temp_strength -= from_temp
+#   3. stats.strength = max(0, stats.strength - (amount - from_temp))
+# 반환값: 없음(void). 사망 판정은 호출자(grid_manager / StatusEffects)의 책임.
+# 적용 대상: STR hit 공격, Burn 틱 데미지, detonation burst — 모두 이 함수 경유.
+func take_str_damage(amount: int) -> void
 ```
 
-### Unit 필드 불변 규칙
+### Unit 불변 규칙
 
-- `status` 딕셔너리의 키 타입은 **반드시** `StatusEffects.Type`(int)이어야 한다. 문자열 키 금지.
-- `cards` 배열은 배틀이 끝나면 참조가 유효하다는 보장이 없다. 배틀 외부에서 접근 금지.
-- `unit.status`를 직접 수정하는 코드는 `StatusEffects.add()` 내부에만 존재해야 한다. 그 외 위치에서 `unit.status[key] = value` 형태 작성 금지.
+- `status` 딕셔너리의 키 타입은 **반드시** `StatusEffects.Type`(int). 문자열 키 금지.
+- `unit.status`를 직접 수정하는 코드는 `StatusEffects.add()` / `StatusEffects.consume()` 내부에만 존재. 그 외 위치에서 `unit.status[key] = value` 작성 금지.
+- `cards` 배열은 배틀 외부에서 접근 금지.
+- `take_str_damage()`를 우회하여 `stats.strength`나 `temp_strength`를 외부에서 직접 감산 금지.
 
 ---
 
 ## 계약 C — StatusEffects 정적 API
 
-**파일 위치:** `scripts/battle/status_effects.gd` (combat-programmer 신규 생성)  
+**파일 위치:** `scripts/battle/status_effects.gd` (combat-programmer 소유)  
 **소비자:**
-- combat-programmer: `grid_manager.gd`의 턴 시작 훅에서 `tick_turn_start()` 호출, `CardEffects` 내부에서 `add()` / `get_stacks()` 호출
+- combat-programmer: `grid_manager.gd`의 턴 시작 훅에서 `tick_turn_start()` 호출,
+  `CardEffects` 내부에서 `add()` / `get_stacks()` / `consume()` 호출
 - ui-programmer: `get_stacks(unit, Type.BURN)`으로 화염 스택 수 조회 (UI 표시)
 - qa-verifier: 단위 테스트 작성 시 이 API만 사용
 
@@ -104,56 +161,69 @@ enum Type {
 }
 
 # Burn 스택의 상한선. add() 호출 결과가 이 값을 초과하지 않도록 클램프.
-# High Density 카드(max 7)는 이번 슬라이스 제외 — Epic 슬라이스에서 이 상수 확장 예정.
+# High Density 카드(max 7)는 F4 슬라이스까지 보류 — 현재 5 고정.
 const MAX_STACK: int = 5
 
 
 # unit.status[type] 에 amount 스택을 추가한다.
-# 결과 스택 수 = clamp(현재 스택 수 + amount, 0, MAX_STACK).
+# 결과 스택 수 = clamp(현재 + amount, 0, MAX_STACK).
 # amount가 0 이하이면 no-op.
-# 호출자: CardEffects.apply_on_attack() (내부), 미래 반격 카드 로직.
+# 호출자: CardEffects.apply_on_attack() 내부.
 static func add(unit: Unit, type: Type, amount: int) -> void
 
 
 # unit.status[type] 의 현재 스택 수를 반환한다.
 # unit.status에 해당 키가 없으면 0 반환 (KeyError 없음).
-# 읽기 전용 — 이 함수는 unit.status를 수정하지 않음.
+# 읽기 전용 — unit.status를 수정하지 않음.
 static func get_stacks(unit: Unit, type: Type) -> int
+
+
+# unit.status[type] 에서 최대 amount 스택을 제거하고 실제 제거된 수를 반환한다. (F1 신규)
+#
+# 동작:
+#   1. current = get_stacks(unit, type)
+#   2. removed = min(current, amount)   (음수 방지: amount <= 0 이면 no-op, return 0)
+#   3. unit.status[type] = current - removed
+#   4. return removed
+#
+# 반환값: 실제 제거된 스택 수(int). 0이면 스택이 없었거나 amount <= 0.
+# 호출자: CardEffects.apply_on_attack() 내부 (detonation 소비 처리).
+static func consume(unit: Unit, type: Type, amount: int) -> int
 
 
 # 해당 unit의 턴 시작 처리를 수행하고 실제 입힌 총 데미지를 반환한다.
 #
-# BURN 처리 (현재 슬라이스에서 구현):
+# BURN 처리:
 #   1. burn_stacks = get_stacks(unit, Type.BURN)
-#   2. damage = burn_stacks * 1  (고정값, 스탯 비례 없음 — decisions_log.md 참조)
-#   3. unit.stats.strength -= damage  (temp_str 버퍼 → base_str 순 차감은 combat.gd와 동일한 규칙)
-#   4. unit.status[BURN] = max(0, burn_stacks - 1)  (감쇠 -1/턴)
+#   2. damage = burn_stacks × BURN_DAMAGE_PER_STACK  (고정값, 스탯 비례 없음)
+#   3. unit.take_str_damage(damage)  ← temp 버퍼 우선 차감 (F1 갱신)
+#   4. unit.status[BURN] = max(0, burn_stacks - BURN_DECAY_PER_TURN)  (감쇠 -1/턴)
 #   5. return damage
 #
-# FROST / GUARD: 이번 슬라이스에서 아무 처리도 하지 않음 (no-op).
+# FROST / GUARD: 아무 처리도 하지 않음 (no-op).
 #
 # 반환값: 실제 입힌 데미지(int). 0이면 이 턴에 Burn 효과 없음.
-#
-# 중요: 사망 판정(strength <= 0 체크 및 유닛 제거)은 이 함수의 책임이 아님.
-#        호출자(grid_manager)가 반환값을 확인한 후 직접 사망 판정 수행.
+# 중요: 사망 판정은 이 함수의 책임이 아님 — 호출자(grid_manager)가 수행.
 static func tick_turn_start(unit: Unit) -> int
 ```
 
 ### StatusEffects 호출 순서 (grid_manager 구현 참고)
 
-```
-# 턴 시작 시 grid_manager에서 호출해야 하는 순서:
+```gdscript
+# 턴 시작 시 grid_manager에서 호출해야 하는 순서 (F1 갱신):
 var burn_damage := StatusEffects.tick_turn_start(active_unit)
-if burn_damage > 0 and active_unit.stats.strength <= 0:
-    _handle_unit_death(active_unit)  # 기존 사망 처리 로직
-    return  # 이미 죽었으면 이 유닛의 일반 행동 생략
+if burn_damage > 0 and not active_unit.is_alive():
+    _kill_unit(active_unit)  # 기존 사망 처리 로직
+    _check_battle_end()
+    # ... 이후 처리
+    return
 ```
 
 ---
 
 ## 계약 D — CardEffects 정적 API
 
-**파일 위치:** `scripts/battle/card_effects.gd` (combat-programmer 신규 생성)  
+**파일 위치:** `scripts/battle/card_effects.gd` (combat-programmer 소유)  
 **소비자:**
 - combat-programmer: `grid_manager.gd` 내 `resolve_attack()` 직후 호출
 
@@ -163,22 +233,33 @@ class_name CardEffects
 
 # attacker의 cards 배열을 순회하며 공격 시(on_attack) 효과를 target에 적용한다.
 #
-# 현재 슬라이스에서 처리하는 필드:
+# 처리 순서 (카드별로 순서대로):
+#
+# [1] Burn 부여 (Burn 슬라이스 — 기존):
 #   - on_attack_burn > 0 인 카드:
-#       → StatusEffects.add(target, StatusEffects.Type.BURN, card.on_attack_burn) 호출.
+#       → Kindling 규칙(on_attack_burn_requires_burning == true)이고 target Burn = 0이면 스킵.
+#       → 아니면 StatusEffects.add(target, BURN, card.on_attack_burn) 호출.
 #
-#   - Kindling 규칙 (on_attack_burn_requires_burning == true):
-#       → StatusEffects.get_stacks(target, StatusEffects.Type.BURN) == 0 이면
-#         해당 카드의 on_attack_burn을 적용하지 않고 넘어감 (스킵).
-#       → 이미 Burn > 0 이면 정상 적용.
+# [2] Detonation / burst (F1 슬라이스 — 신규):
+#   a. 게이트 체크:
+#       - on_attack_min_burn > 0 이고 get_stacks(target, BURN) < on_attack_min_burn → 이 카드 스킵.
+#   b. 스택 소비:
+#       - on_attack_consume_all_burn == true → consumed = consume(target, BURN, MAX_INT)
+#           (MAX_INT 대신 get_stacks()값을 전달하는 것과 동일; 편의상 MAX_STACK을 상한으로 전달 가능)
+#       - 아니면 consumed = consume(target, BURN, card.on_attack_consume_burn)
+#   c. 버스트 데미지 계산:
+#       burst = consumed × card.on_attack_burst_per_stack + card.on_attack_burst_flat
+#   d. 방어 무시 데미지 적용:
+#       if burst > 0: target.take_str_damage(burst)
+#       (armor를 무시 — Combat.resolve_attack()의 strength hit 경로와 달리 armor 차감 없음)
 #
-# 적 유닛(Unit.is_player == false)은 cards가 항상 빈 배열이므로 자동 no-op.
-# on_attack_burn == 0 인 카드는 아무 효과 없이 패스.
+# 순서 불변 규칙: [1] Burn 부여 → [2] Detonation. 같은 공격에서 Burn을 먼저 쌓고 detonation
+# 게이트를 체크하는 카드는 없다 (카드 설계상 분리). 순서 역전 금지.
 #
-# 호출 위치: grid_manager 내 공격 해결 직후, 사망 판정 이전.
+# 호출 위치 (grid_manager):
 #   Combat.resolve_attack(attacker, target, hit_armor)  ← 기존 호출
-#   CardEffects.apply_on_attack(attacker, target)       ← 이 함수 (신규 추가)
-#   if target.stats.strength <= 0: _handle_unit_death(target)  ← 기존 사망 판정
+#   CardEffects.apply_on_attack(attacker, target)       ← 이 함수
+#   if not target.is_alive(): _kill_unit(target)        ← F1 갱신된 사망 판정
 static func apply_on_attack(attacker: Unit, target: Unit) -> void
 ```
 
@@ -189,17 +270,17 @@ static func apply_on_attack(attacker: Unit, target: Unit) -> void
 한 파일은 정확히 한 에이전트만 소유한다.
 소유자 외의 에이전트는 해당 파일을 **읽기만** 가능하며, 직접 수정하지 않는다.
 
-| 파일 | 소유 에이전트 | 비고 |
+| 파일 | 소유 에이전트 | 상태 |
 |---|---|---|
-| `scripts/data/card_data.gd` | combat-programmer | CardData 클래스 정의 |
-| `data/cards/*.tres` | data-balancer | CardData 인스턴스 (값 작성) |
-| `scripts/battle/status_effects.gd` | combat-programmer | StatusEffects 클래스 신규 생성 |
-| `scripts/battle/card_effects.gd` | combat-programmer | CardEffects 클래스 신규 생성 |
-| `scripts/battle/unit.gd` | combat-programmer | `status`, `cards` 필드 추가 |
-| `scripts/battle/grid_manager.gd` | combat-programmer | tick_turn_start 훅, apply_on_attack 훅 삽입 |
-| `scripts/battle/combat.gd` | combat-programmer | 현재 슬라이스에서 수정 없음 |
-| `scenes/battle/*.tscn` | ui-programmer | Burn 스택 수 HUD 노드 추가 |
-| `scripts/battle/stats_panel.gd` | ui-programmer | get_stacks 호출로 Burn 표시 갱신 |
+| `scripts/data/card_data.gd` | combat-programmer | F1 필드 추가 |
+| `data/cards/*.tres` | data-balancer | F1 카드 4장 추가 |
+| `scripts/battle/status_effects.gd` | combat-programmer | `consume()` 신규, `tick_turn_start()` temp 갱신 |
+| `scripts/battle/card_effects.gd` | combat-programmer | detonation 처리 추가 |
+| `scripts/battle/unit.gd` | combat-programmer | `temp_strength`, `effective_strength()`, `is_alive()`, `take_str_damage()` 추가 |
+| `scripts/battle/combat.gd` | combat-programmer | `effective_strength()` 사용, `take_str_damage()` 사용 |
+| `scripts/battle/grid_manager.gd` | combat-programmer | 사망 판정 `is_alive()` 통일, Solar 초기화, temp 초기화 |
+| `scenes/battle/*.tscn` | ui-programmer | 변경 없음 (F1) |
+| `scripts/battle/stats_panel.gd` | ui-programmer | temp STR 병기 표시 |
 | `docs/systems/card_system_api.md` | systems-designer | 이 문서 (계약 변경 시 먼저 여기 업데이트) |
 
 ---
@@ -214,50 +295,40 @@ static func apply_on_attack(attacker: Unit, target: Unit) -> void
 | Burn 자연 감쇠 | 턴당 -1 스택 (0 클램프) | 무한 DoT 스노볼 방지 — decisions_log.md "Per-element stack decay rules" |
 | Frost / Guard 자연 감쇠 | 없음 (감쇠 없음) | Burn만 직접 데미지; 나머지 둘은 DoT 아님 |
 | Kindling 규칙 | 대상 Burn = 0이면 0 적용 | 증폭 전용 카드, from-scratch 적용 불가 |
-| 최대 스택 수 | 5 | High Density(max 7) 확장은 Epic 슬라이스까지 보류 |
+| 최대 스택 수 | 5 | High Density(max 7) 확장은 F4 슬라이스까지 보류 |
 | RNG | 없음 | 완전 결정론적 — decisions_log.md "Combat resolution stays fully deterministic" |
+| temp STR 성격 | 공격력·HP 양쪽 적용 (effective_strength()) | 단일 스탯 원칙 유지, Fire=버스트 정체성 강화 |
 | temp STR 차감 순서 | temp 버퍼 먼저, 이후 base STR | decisions_log.md "Temp STR depletion order" |
-| 사망 판정 책임 | grid_manager (tick_turn_start / apply_on_attack 호출 후) | StatusEffects / CardEffects는 stats만 수정 |
+| detonation 데미지 | 방어 무시 (armor 차감 없음) | 폭발 = 관통 페이오프 |
+| 사망 판정 책임 | grid_manager (`tick_turn_start` / `apply_on_attack` 호출 후 `is_alive()` 체크) | StatusEffects / CardEffects는 stats만 수정 |
 
 ---
 
 ## 미래 확장 계약 (예약 공간 — 현재 슬라이스에서 구현하지 않음)
 
-Frost / Guard 슬라이스가 시작되기 전에 이 문서를 업데이트해야 한다.
-아래 항목은 예약된 확장 포인트이며, 이번 슬라이스에서는 코드를 작성하지 않는다.
-
 ### CardData에 추가될 필드 (예상)
 
 ```gdscript
-# Frost 슬라이스에서 추가 예정:
-@export var on_attack_frost: int = 0               # 공격 시 부여할 Frost 스택 수
-@export var on_attack_frost_requires_frost: bool = false  # Kindling 패턴 동일하게 적용 가능성
+# F2 반응형 방어 슬라이스에서 추가 예정:
+@export var on_hit_burn_attacker: int = 0     # 피격 시 공격자에게 Burn 부여 (Flame Retort)
+@export var on_hit_damage_reduction_if_target_burning: float = 0.0  # Ember Barrier
+
+# F3 AoE/on-death 슬라이스에서 추가 예정:
+@export var on_attack_aoe_burn: int = 0       # 공격 시 인접 적 전체 Burn 부여 (Conflagration)
+@export var on_burn_kill_transfer_stacks: bool = false  # Burn으로 처치 시 스택 전이 (Ember Trace)
+
+# F4 틱 수정자 슬라이스에서 추가 예정:
+@export var on_attack_burn_tick_multiplier: float = 1.0  # White Heat (그 턴 틱 데미지 ×2)
+@export var on_attack_burn_decay_slow: bool = false      # Smolder (감쇠 2턴에 1회)
+@export var on_attack_burn_max_override: int = 0         # High Density (MAX_STACK을 7로)
+@export var on_burn_threshold_armor_debuff: int = 0      # Brittle Coat (Burn≥3 → AMR-2)
 
 # Guard 슬라이스에서 추가 예정:
-@export var on_hit_guard: int = 0                  # 피격 시 자신에게 부여할 Guard 스택 수
-@export var on_hit_counter_damage_multiplier: float = 1.0  # Thorn Armor "doubled" 반영 (기본 1.0 = 배율 없음)
-
-# 미래 가능성 (Epic/agnostic 슬라이스):
-@export var on_attack_burn_consume_all: bool = false   # Grand Detonation 스타일 전소 소비
-@export var on_attack_burst_damage: int = 0            # 소비 후 즉발 데미지 고정값 (스탯 비례 아님)
+@export var on_hit_guard: int = 0
+@export var on_hit_counter_damage_multiplier: float = 1.0
 ```
 
 ### StatusEffects에 추가될 동작
 
-- **FROST (Type = 1):**
-  - `add()`: 현재 슬라이스와 동일하게 작동 (스택 클램프)
-  - `tick_turn_start()` 내 FROST 처리: SPD 감소 적용 (감쇠 없음 — 명세 필요)
-  - 최대 스택 도달 시 Freeze 발동: 해당 유닛의 이번 턴 행동 취소 + 스택 0 리셋 (threshold-effect stack consumption 규칙 적용)
-  - Freeze 발동은 `tick_turn_start()`가 아니라 별도 `check_freeze(unit)` API가 필요할 수 있음 — Frost 슬라이스에서 결정
-
-- **GUARD (Type = 2):**
-  - `add()`: 현재 슬라이스와 동일하게 작동 (스택 클램프)
-  - `tick_turn_start()` 내 GUARD 처리: no-op (감쇠 없음)
-  - 피격 시 반격 (`stacks × 1` 갑옷 관통 데미지) — `on_hit_counter()` API 신규 추가 예정
-  - AMR 증가는 스택 수에 비례하여 `UnitStats.armor`를 임시 증가 (배틀 종료 시 원복 필요) — 구현 방식 미확정
-
-### MAX_STACK 확장
-
-- High Density 카드(`on_attack_burn_max_override: int = 7` 필드 추가 예정) 구현 시
-  `StatusEffects.MAX_STACK`을 전역 상수로 유지할지, 유닛별 per-unit 오버라이드로 바꿀지 결정 필요.
-  현재 슬라이스에서는 전역 상수 5 고정.
+- **FROST (Type = 1):** SPD 감소 + 임계 시 Freeze (행동 취소) — Frost 슬라이스에서 명세
+- **GUARD (Type = 2):** 피격 시 반격 + AMR 임시 증가 — Guard 슬라이스에서 명세
