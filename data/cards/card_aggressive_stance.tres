@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://cmn_aggst_001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "aggressive_stance"
+title = "공격 자세"
+description = "전투 시작 시: STR +2, SPD +1."
+element = 0
+tier = 0
+battle_start_str_bonus = 2
+battle_start_spd_bonus = 1

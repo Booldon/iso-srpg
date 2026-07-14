@@ -439,10 +439,14 @@ func _place_players() -> void:
 			var card := load(card_path) as CardData
 			if card:
 				unit.cards.append(card)
-		# Apply Solar / battle-start temp STR from cards (F1 — sums all battle_start_temp_str_self)
+		# Apply battle-start card effects: temp STR (Solar) + base stat bonuses (Common)
 		unit.temp_strength = 0
 		for card in unit.cards:
 			unit.temp_strength += card.battle_start_temp_str_self
+			unit.stats.strength   = maxi(1, unit.stats.strength   + card.battle_start_str_bonus)
+			unit.stats.armor      = maxi(0, unit.stats.armor      + card.battle_start_armor_bonus)
+			unit.stats.speed      = maxi(1, unit.stats.speed      + card.battle_start_spd_bonus)
+			unit.stats.move_range = maxi(1, unit.stats.move_range + card.battle_start_move_bonus)
 		unit.roster_path = rec["path"]
 		unit.grid_col = cell.x
 		unit.grid_row = cell.y

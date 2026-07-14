@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://cmn_qstep_001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "quick_step"
+title = "빠른 발걸음"
+description = "전투 시작 시: SPD +4."
+element = 0
+tier = 0
+battle_start_spd_bonus = 4

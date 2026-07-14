@@ -39,4 +39,13 @@ enum Tier { COMMON, RARE, EPIC }
 
 # --- Solar / temp STR (F1 슬라이스 — 구현됨) ---
 # 전투 시작 시(배치 직후) 이 카드를 보유한 유닛 자신에게 부여하는 임시 Strength.
+# temp_strength 버퍼에 쌓임 — 피해 시 base STR보다 먼저 깎임.
 @export var battle_start_temp_str_self: int = 0
+
+# --- 전투 시작 스탯 보너스 (Common 슬라이스 — 구현됨) ---
+# 배치 직후 unit.stats에 직접 합산. 음수면 패널티 (Trade-off 카드용).
+# base STR 수정이므로 temp_strength와 달리 피해 시 일반 차감 규칙을 따름.
+@export var battle_start_str_bonus:   int = 0
+@export var battle_start_armor_bonus: int = 0
+@export var battle_start_spd_bonus:   int = 0
+@export var battle_start_move_bonus:  int = 0

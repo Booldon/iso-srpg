@@ -72,8 +72,25 @@ enum Tier { COMMON, RARE, EPIC }
 
 # --- Solar / temp STR 효과 (F1 슬라이스 — 구현됨) ---
 # 전투 시작 시(배치 직후) 이 카드를 보유한 유닛 자신에게 부여하는 임시 Strength.
+# temp_strength 버퍼에 쌓임 — 피해 시 base STR보다 먼저 깎임 (take_str_damage 규칙).
 # 0이면 효과 없음.
 @export var battle_start_temp_str_self: int = 0
+
+# --- 전투 시작 스탯 보너스 (Common 슬라이스 — 구현됨) ---
+# 배치 직후 unit.stats에 직접 더해지는 값. 음수면 패널티 (Trade-off 카드용).
+# base stats 수정이므로 temp_strength와 달리 피해 시 일반 STR 차감 규칙을 따름.
+# 모든 값의 기본은 0 (no-op).
+#
+# 적용 순서 (grid_manager._place_players):
+#   unit.stats.strength  = max(1, unit.stats.strength  + sum(card.battle_start_str_bonus))
+#   unit.stats.armor     = max(0, unit.stats.armor     + sum(card.battle_start_armor_bonus))
+#   unit.stats.speed     = max(1, unit.stats.speed     + sum(card.battle_start_spd_bonus))
+#   unit.stats.move_range= max(1, unit.stats.move_range+ sum(card.battle_start_move_bonus))
+# Solar(temp) 합산과 동일한 루프에서 처리. 적 유닛은 cards==[] 이므로 자동 no-op.
+@export var battle_start_str_bonus:   int = 0
+@export var battle_start_armor_bonus: int = 0
+@export var battle_start_spd_bonus:   int = 0
+@export var battle_start_move_bonus:  int = 0
 ```
 
 ### CardData 불변 규칙
@@ -155,9 +172,9 @@ class_name StatusEffects
 # Type: 상태이상 종류. int 값 0/1/2 고정 — unit.status 딕셔너리 키로 사용.
 # 절대 변경 금지. 미래 슬라이스에서 값 추가만 허용.
 enum Type {
-    BURN  = 0,   # 턴 시작 시 STR 데미지 + 자연 감쇠
-    FROST = 1,   # SPD 감소 (미구현, 예약됨)
-    GUARD = 2    # AMR 증가 + 반격 (미구현, 예약됨)
+	BURN  = 0,   # 턴 시작 시 STR 데미지 + 자연 감쇠
+	FROST = 1,   # SPD 감소 (미구현, 예약됨)
+	GUARD = 2    # AMR 증가 + 반격 (미구현, 예약됨)
 }
 
 # Burn 스택의 상한선. add() 호출 결과가 이 값을 초과하지 않도록 클램프.
@@ -213,10 +230,10 @@ static func tick_turn_start(unit: Unit) -> int
 # 턴 시작 시 grid_manager에서 호출해야 하는 순서 (F1 갱신):
 var burn_damage := StatusEffects.tick_turn_start(active_unit)
 if burn_damage > 0 and not active_unit.is_alive():
-    _kill_unit(active_unit)  # 기존 사망 처리 로직
-    _check_battle_end()
-    # ... 이후 처리
-    return
+	_kill_unit(active_unit)  # 기존 사망 처리 로직
+	_check_battle_end()
+	# ... 이후 처리
+	return
 ```
 
 ---

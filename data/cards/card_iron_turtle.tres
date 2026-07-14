@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://cmn_itrtl_001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "iron_turtle"
+title = "철갑 거북"
+description = "전투 시작 시: AMR +8, 이동 범위 -1."
+element = 0
+tier = 0
+battle_start_armor_bonus = 8
+battle_start_move_bonus = -1

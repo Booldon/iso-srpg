@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://cmn_harms_001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "heavy_arms"
+title = "중화기"
+description = "전투 시작 시: STR +5, SPD -3."
+element = 0
+tier = 0
+battle_start_str_bonus = 5
+battle_start_spd_bonus = -3
