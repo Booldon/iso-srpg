@@ -4,53 +4,60 @@ description: 가장 최근 세션에서 작업한 내용 요약
 metadata: 
   node_type: memory
   type: project
-  originSessionId: c9fc6f8a-a66e-46c8-9d6c-79fd138c3099
+  originSessionId: b22ffea0-8de0-4388-800f-54d9190f9a94
 ---
 
-## 세션 요약 (2026-07-13)
+## 세션 요약 (2026-07-14)
 
 ### 작업 내용
-- 테스트/디버그 모드 시스템 완성 (game_state.gd 수정, debug_menu 씬+스크립트, title TEST MODE 버튼, 디버그 시나리오 .tres 3종)
-- F1 단축키 → 백틱(`) 으로 변경 (Godot 에디터가 F1 가로챔 문제 해결)
-- 부운(BoonData/BoonApplier) 시스템 전면 제거, 카드 선택으로 통일
-  - GameState.active_boons → active_cards, advance_stage() 파라미터 정리
-  - grid_manager에서 BoonApplier 제거, active_cards를 주인공(armor_reduction_immune)에만 주입
-  - world_map 텍스트 "획득 부운" → "획득 카드"
-- 카드 등급 추첨 시스템 구현 (Common 30 / Rare 60 / Epic 10 기본 확률)
-  - CardDrawConfig Resource (가중치·천장·에픽 보정 전부 .tres 관리)
-  - CardDraw static 헬퍼 (roll_tier / eligible / draw)
-  - 소프트 천장(Rare 미등장마다 +15%) + 하드 천장(3스테이지째 Rare 확정)
-  - 에픽 게이팅: 조건없는 에픽 상시 후보 / 조건부 에픽은 전제 카드 보유 시 후보+가중↑
-  - CardData에 prerequisite_card_ids 필드 추가
-  - boon_screen.gd → CardDraw 사용으로 재작성
-  - 헤드리스 스모크 테스트 스크립트 작성 (card_draw_smoke_test.gd)
-- GDScript 파싱 에러 수정: Array[CardData.Tier] → Array[int] (GDScript 4는 외부 enum을 배열 원소 타입으로 허용 안 함)
-- 세이브 버전 v3 → v4 (active_boons→active_cards) → v5 (stages_since_rare 추가)
+- Fire F1 슬라이스 완성: temp STR 기반 + detonation + Solar
+  - `unit.gd`에 `temp_strength`, `effective_strength()`, `is_alive()`, `take_str_damage()` 추가
+  - `combat.gd` — `effective_strength()` + `take_str_damage()` 사용으로 교체
+  - `status_effects.gd` — `consume()` 신규, `tick_turn_start()` temp 경로 갱신
+  - `card_effects.gd` — detonation 블록([2] Burn 소비 → 방어 무시 버스트) 추가
+  - `card_data.gd` — detonation/Solar/stat-bonus 필드 추가
+  - `grid_manager.gd` — 사망 판정 `is_alive()` 통일, Solar 초기화, stat bonus 적용
+  - `stats_panel.gd` — temp STR 병기 표시 (`STR base(+temp)`)
+- Fire 카드 4장 추가: raging_flame, overheat, solar_blessing, grand_detonation(Epic)
+- API 명세서 v1.1 갱신 (`docs/systems/card_system_api.md`)
+- Debug 시스템 개선
+  - `DebugScenario`에 `stages_since_rare` 필드 추가 → `debug_menu`에서 GameState 주입
+  - `scenario_boon_screen.tres` — ember 보유 + stages_since_rare=2 설정 (Epic 검증용)
+  - `boon_screen.gd` — `[DEBUG] 다시 뽑기` 버튼 추가 (OS.is_debug_build() 조건)
+- Common 카드 15장 추가
+  - `card_data.gd` — `battle_start_str/armor/spd/move_bonus` 필드 4개 신규
+  - `grid_manager._place_players()` — 배치 루프에 stat bonus 적용 (clamp 포함)
+  - Pure(4) / Hybrid(6) / Trade-off(5) 전체 .tres 파일 생성
+- 보유 카드 중복 제외: `card_draw.eligible()`에 `card.id in owned_ids` 체크 추가
 
 ### 결정 사항
-- 부운(BoonData) 폐기, 카드가 유일한 런 성장 시스템
-- 카드는 주인공 전용 (armor_reduction_immune == true 식별)
-- 기본 등급 확률 Common 30 / Rare 60 / Epic 10
-- 천장: 소프트 누적(+15%/스테이지) + 하드 확정(3스테이지째 Rare 강제)
-- 에픽: 조건없는 에픽 항상 후보 / 조건부 에픽은 전제 충족 시 후보 합류 + 가중 보정 (설계서 §6.4 완화)
-- 후보 부족 시 "있는 만큼만 표시" (빈 화면 방지 폴백 있음)
+- temp STR 성격: 공격+생존 양쪽 적용 (`effective_strength()` = base + temp), 피해 시 temp 버퍼 우선 차감
+- Common 카드 STR 보너스: base `stats.strength` 직접 수정 (temp와 별개 — 전투 내 영구 적용)
+- 신규 모듈 함수 추가 시 API 명세서를 먼저 문서화한 뒤 코드 작성 (프로세스 규칙 확립)
+- 코드 변경 후 파일명·라인 포함한 12살도 이해할 수 있는 코드 리뷰 설명 제공 (프로세스 규칙 확립)
+- 보유 카드는 카드 뽑기 풀에서 제외 (중복 없는 수집 구조)
 
 ### 다음 작업
-- 에디터 시각 검증 (카드 선택 화면 등급 분리 동작, 천장 카운터, 주인공 카드 적용 확인)
-- Common 카드 및 Epic 카드 .tres 데이터 추가 (현재 Rare 3장만 존재, 폴백으로만 동작 중)
-- boon_screen.tscn → card_screen.tscn 개명 (파일명이 내용과 불일치, 스코프 억제 중)
-- data/boons/ 폴더 정리 (코드 참조 없으나 파일 잔존)
+- 에디터 시각 검증: Common 카드 스탯 반영 확인 (debug_player_cards에 grit/glass_cannon 등 장착)
+- Fire F2 슬라이스: 반응형 방어 카드 (Flame Retort, Ember Barrier, Ashen Ward) — on-hit 훅 신규
+- Fire F3: AoE + on-death (Conflagration, Wildfire Storm, Ember Trace)
+- Fire F4: 틱 수정자 (White Heat, Smolder, High Density, Brittle Coat)
+- Fire F5: Phoenix 계열 + Avatar of Blaze (once-per-battle, boss flag)
+- Agnostic Rare/Epic 카드 데이터 추가 (agnostic_cards.md 기반)
 
 ### 주요 파일 변경
-- `scripts/autoload/game_state.gd` — active_cards, stages_since_rare, save v5, 백틱 단축키
-- `scripts/world/boon_screen.gd` — CardDraw 기반 재작성
-- `scripts/world/title.gd` + `scenes/world/title.tscn` — TEST MODE 버튼
-- `scripts/battle/grid_manager.gd` — BoonApplier 제거, active_cards 주인공 주입
-- `scripts/world/world_map.gd` — 카드 수 표시
-- `scripts/data/card_data.gd` — prerequisite_card_ids 추가
-- `scripts/data/card_draw_config.gd` + `data/card_draw_config.tres` — 신규
-- `scripts/data/card_draw.gd` — 신규 (추첨 로직)
-- `scripts/data/card_draw_smoke_test.gd` — 신규 (헤드리스 테스트)
-- `scripts/debug/debug_menu.gd` + `scenes/debug/debug_menu.tscn` — 신규
-- `scripts/debug/CLAUDE.md` — 신규
-- `data/debug_scenarios/*.tres` — 신규/갱신
+- `scripts/battle/unit.gd` — temp_strength, effective_strength(), is_alive(), take_str_damage()
+- `scripts/battle/combat.gd` — effective_strength/take_str_damage 사용
+- `scripts/battle/status_effects.gd` — consume() 신규, tick_turn_start() 갱신
+- `scripts/battle/card_effects.gd` — detonation 블록 추가
+- `scripts/battle/grid_manager.gd` — is_alive() 사망 판정, Solar+stat bonus 초기화
+- `scripts/battle/stats_panel.gd` — temp STR 병기 표시
+- `scripts/data/card_data.gd` — detonation/Solar/stat-bonus 필드 추가
+- `scripts/data/card_draw.gd` — 보유 카드 중복 제외
+- `scripts/data/debug_scenario.gd` — stages_since_rare 필드 추가
+- `scripts/debug/debug_menu.gd` — stages_since_rare GameState 주입
+- `scripts/world/boon_screen.gd` — _roll_and_build() 분리, 다시 뽑기 버튼
+- `docs/systems/card_system_api.md` — v1.1 갱신 (detonation/Solar/stat-bonus 계약)
+- `data/cards/` — Fire 4장 + Common 15장 = 총 22장 (card_*.tres)
+- `data/debug_scenarios/scenario_boon_screen.tres` — ember + pity 설정
+- `scripts/battle/fire_payoff_smoke_test.gd` — 신규 (28개 검증 케이스)
