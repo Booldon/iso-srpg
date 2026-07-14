@@ -81,3 +81,25 @@ enum Tier { COMMON, RARE, EPIC }
 # true면 불붙은 적이 사망할 때 남은 스택 절반(올림)을 인접 살아있는 적 하나에 전이 (Ember Trace).
 # 처리 책임: grid_manager._sweep_deaths() → CardEffects.transfer_burn_on_death().
 @export var on_burn_kill_transfer_stacks: bool = false
+
+# --- F4 틱 수정자 (신규) ---
+# White Heat: 공격 시 대상의 다음 Burn 틱 데미지에 곱할 배수. 틱 적용 후 즉시 1.0으로 리셋.
+# 1.0이면 no-op. 처리: apply_on_attack() [3] 블록 → target.burn_tick_mult_next = 이 값.
+@export var on_attack_burn_tick_multiplier: float = 1.0
+
+# Smolder: 공격 시 대상의 자연 Burn 감쇠를 2턴에 1회로 늦춤.
+# false이면 no-op. 처리: apply_on_attack() [3] 블록 → target.burn_decay_slowed = true.
+@export var on_attack_burn_decay_slow: bool = false
+
+# High Density: 보유 시 전투 시작 시 모든 유닛의 Burn 상한을 이 값으로 올림 (예: 7).
+# 0이면 no-op (기본 MAX_STACK=5 유지). grid_manager._setup_burn_caps()가 처리.
+# 여러 카드가 있으면 최댓값 적용.
+@export var on_attack_burn_max_override: int = 0
+
+# Brittle Coat: Burn 스택이 임계 이상인 적의 유효 AMR을 지속 차감하는 양 (예: 2).
+# 0이면 no-op. 처리 책임: grid_manager._refresh_burn_armor_debuffs() → enemy.burn_armor_debuff 갱신.
+@export var on_burn_threshold_armor_debuff: int = 0
+
+# Brittle Coat 발동 최소 Burn 스택. get_stacks(enemy, BURN) >= 이 값이면 디버프 활성.
+# on_burn_threshold_armor_debuff == 0이면 이 값은 무시됨.
+@export var on_burn_threshold_armor_min: int = 3

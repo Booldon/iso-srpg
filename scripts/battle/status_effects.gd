@@ -16,13 +16,15 @@ const BURN_DECAY_PER_TURN: int = 1
 
 
 # unit.status[type] 에 amount 스택을 추가한다.
-# 결과 스택 수 = clamp(현재 스택 수 + amount, 0, MAX_STACK).
+# BURN 타입: 결과 스택 수 = clamp(현재 + amount, 0, unit.burn_max).
+# 비-BURN 타입: 결과 스택 수 = clamp(현재 + amount, 0, MAX_STACK).
 # amount가 0 이하이면 no-op.
 static func add(unit: Unit, type: Type, amount: int) -> void:
 	if amount <= 0:
 		return
+	var cap: int = unit.burn_max if type == Type.BURN else MAX_STACK
 	var current: int = unit.status.get(type, 0)
-	unit.status[type] = clampi(current + amount, 0, MAX_STACK)
+	unit.status[type] = clampi(current + amount, 0, cap)
 
 
 # unit.status[type] 의 현재 스택 수를 반환한다.
@@ -46,12 +48,18 @@ static func consume(unit: Unit, type: Type, amount: int) -> int:
 
 # 해당 unit의 턴 시작 처리를 수행하고 실제 입힌 총 데미지를 반환한다.
 #
-# BURN 처리:
+# BURN 처리 (F4 갱신):
 #   1. burn_stacks = get_stacks(unit, Type.BURN)
-#   2. damage = burn_stacks × BURN_DAMAGE_PER_STACK  (고정값, 스탯 비례 없음)
-#   3. unit.take_str_damage(damage)  (temp 버퍼 우선 차감 — F1 갱신)
-#   4. unit.status[BURN] = max(0, burn_stacks - BURN_DECAY_PER_TURN)  (감쇠 -1/턴)
-#   5. return damage
+#   2. damage = roundi(burn_stacks × BURN_DAMAGE_PER_STACK × unit.burn_tick_mult_next)
+#      (White Heat: burn_tick_mult_next = 2.0이면 틱 데미지 2배)
+#   3. unit.burn_tick_mult_next = 1.0  ← 틱 후 즉시 리셋
+#   4. unit.take_str_damage(damage)  ← temp 버퍼 우선 차감 (F1)
+#   5. 자연 감쇠 (F4 갱신):
+#      - burn_decay_slowed == false: 매턴 -1
+#      - burn_decay_slowed == true (Smolder):
+#          _burn_decay_skip == true → 감쇠 없이 skip = false로 전환
+#          _burn_decay_skip == false → 감쇠 -1, skip = true (다음 턴 skip)
+#   6. return damage
 #
 # FROST / GUARD: 아무 처리도 하지 않음 (no-op).
 #
@@ -60,7 +68,15 @@ static func tick_turn_start(unit: Unit) -> int:
 	var burn: int = get_stacks(unit, Type.BURN)
 	if burn == 0:
 		return 0
-	var damage: int = burn * BURN_DAMAGE_PER_STACK
+	var damage: int = roundi(burn * BURN_DAMAGE_PER_STACK * unit.burn_tick_mult_next)
+	unit.burn_tick_mult_next = 1.0  # White Heat reset
 	unit.take_str_damage(damage)
-	unit.status[Type.BURN] = maxi(0, burn - BURN_DECAY_PER_TURN)
+	# Natural decay
+	if not unit.burn_decay_slowed:
+		unit.status[Type.BURN] = maxi(0, burn - BURN_DECAY_PER_TURN)
+	elif unit._burn_decay_skip:
+		unit._burn_decay_skip = false  # this turn: skip decay, reset flag
+	else:
+		unit.status[Type.BURN] = maxi(0, burn - BURN_DECAY_PER_TURN)
+		unit._burn_decay_skip = true  # next turn: skip decay
 	return damage

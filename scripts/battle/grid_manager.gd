@@ -46,6 +46,8 @@ func _ready() -> void:
 	all_units.append_array(_players)
 	all_units.append_array(_enemies)
 	_turn_manager.start_battle(all_units)
+	# F4: apply High Density burn cap override now that all units are registered
+	_setup_burn_caps()
 
 
 func _process(_delta: float) -> void:
@@ -83,6 +85,8 @@ func _input(event: InputEvent) -> void:
 
 func _on_turn_started(unit: Unit) -> void:
 	var burn_dmg := StatusEffects.tick_turn_start(unit)
+	# F4: refresh Brittle Coat AMR debuff after tick (Burn stacks may have changed)
+	_refresh_burn_armor_debuffs()
 	if burn_dmg > 0 and not unit.is_alive():
 		# Burn 틱으로 사망 → _sweep_deaths()로 Ember Trace 훅 통합 처리
 		_sweep_deaths()
@@ -182,6 +186,8 @@ func _resolve_full_attack(attacker: Unit, target: Unit, hit_armor: bool) -> void
 	CardEffects.apply_on_hit(attacker, target)
 	_apply_ashen_ward(attacker, target)
 	CardEffects.apply_on_attack_aoe(attacker, _splash_targets(target), _living_enemies())
+	# F4: refresh Brittle Coat AMR debuff after all burn changes this attack
+	_refresh_burn_armor_debuffs()
 
 
 # Ashen Ward: target(피격된 아군)에 인접한 다른 플레이어 유닛이 보유한
@@ -570,3 +576,33 @@ func _place_enemies() -> void:
 		_actors.add_child(unit)
 		_unit_at[cell] = unit
 		_enemies.append(unit)
+
+
+# F4: Sets burn_max for all units based on the highest on_attack_burn_max_override among player cards.
+# Called once after both _place_players() and _place_enemies() complete.
+# If no player card has on_attack_burn_max_override > 0, burn_max stays at the default (5).
+func _setup_burn_caps() -> void:
+	var override_max: int = 0
+	for u: Unit in _turn_manager.get_all_units():
+		if u.is_player:
+			for card: CardData in u.cards:
+				if card.on_attack_burn_max_override > override_max:
+					override_max = card.on_attack_burn_max_override
+	if override_max > 0:
+		for u: Unit in _turn_manager.get_all_units():
+			u.burn_max = override_max
+
+
+# F4: Recalculates burn_armor_debuff for every living enemy based on current Burn stacks and
+# Brittle Coat cards held by living players. Called after each attack resolution and after
+# each turn-start tick, so the debuff stays current between attacks and burns.
+func _refresh_burn_armor_debuffs() -> void:
+	var players := _living_players()
+	for enemy: Unit in _living_enemies():
+		var total_debuff: int = 0
+		for p: Unit in players:
+			for card: CardData in p.cards:
+				if card.on_burn_threshold_armor_debuff > 0:
+					if StatusEffects.get_stacks(enemy, StatusEffects.Type.BURN) >= card.on_burn_threshold_armor_min:
+						total_debuff += card.on_burn_threshold_armor_debuff
+		enemy.burn_armor_debuff = total_debuff

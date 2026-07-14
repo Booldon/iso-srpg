@@ -9,5 +9,6 @@ static func resolve_attack(attacker: Unit, target: Unit, hit_armor: bool, dmg_mu
 			var arm_dmg := roundi(attacker.effective_strength() * dmg_mult)
 			target.stats.armor = maxi(0, target.stats.armor - arm_dmg)
 	else:
-		var dmg := maxi(0, attacker.effective_strength() - target.stats.armor)
+		# F4: use effective_armor() so Brittle Coat burn_armor_debuff is reflected
+		var dmg := maxi(0, attacker.effective_strength() - target.effective_armor())
 		target.take_str_damage(roundi(dmg * dmg_mult))

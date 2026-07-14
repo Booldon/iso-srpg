@@ -24,11 +24,25 @@ var cards: Array[CardData] = []   # injected at placement; enemies always []
 var roster_path: String = ""
 var temp_strength: int = 0        # battle-scoped temp STR; 0 at placement, discarded on battle end
 
+# F4 runtime fields — initialized at placement, discarded on battle end. Never saved to .tres.
+var burn_max: int = 5             # Burn stack cap; raised to 7 by High Density
+var burn_tick_mult_next: float = 1.0  # White Heat: multiplier for next tick_turn_start(); reset to 1.0 after use
+var burn_decay_slowed: bool = false   # Smolder: if true, natural decay fires every other turn
+var _burn_decay_skip: bool = false    # Smolder internal toggle; managed by tick_turn_start()
+var burn_armor_debuff: int = 0    # Brittle Coat: AMR reduction set by _refresh_burn_armor_debuffs()
+
 
 # Returns effective Strength = base stats.strength + temp_strength.
 # Used for both attack power (Combat.resolve_attack) and death check (is_alive).
 func effective_strength() -> int:
 	return stats.strength + temp_strength
+
+
+# Returns effective Armor = max(0, stats.armor - burn_armor_debuff).
+# Used in the strength-hit path of Combat.resolve_attack(). Read-only — does not modify state.
+# armor-hit (direct stats.armor deduction) bypasses this method.
+func effective_armor() -> int:
+	return maxi(0, stats.armor - burn_armor_debuff)
 
 
 # Returns true if this unit is still alive (effective_strength > 0).

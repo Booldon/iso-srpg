@@ -46,13 +46,21 @@ static func apply_on_attack(attacker: Unit, target: Unit) -> void:
 		# 소비량 결정
 		var consumed: int = 0
 		if card.on_attack_consume_all_burn:
-			consumed = StatusEffects.consume(target, StatusEffects.Type.BURN, StatusEffects.MAX_STACK)
+			# F4 bug fix: pass actual current stacks, not MAX_STACK, so High Density (7 stacks) is fully consumed
+			consumed = StatusEffects.consume(target, StatusEffects.Type.BURN, StatusEffects.get_stacks(target, StatusEffects.Type.BURN))
 		elif card.on_attack_consume_burn > 0:
 			consumed = StatusEffects.consume(target, StatusEffects.Type.BURN, card.on_attack_consume_burn)
 		# 버스트 데미지 계산 및 방어 무시 적용
 		var burst: int = consumed * card.on_attack_burst_per_stack + card.on_attack_burst_flat
 		if burst > 0:
 			target.take_str_damage(burst)
+
+	# [3] F4 tick modifiers (White Heat, Smolder) — processed after [1] Burn grant and [2] detonation
+	for card: CardData in attacker.cards:
+		if card.on_attack_burn_tick_multiplier > 1.0:
+			target.burn_tick_mult_next = card.on_attack_burn_tick_multiplier
+		if card.on_attack_burn_decay_slow:
+			target.burn_decay_slowed = true
 
 
 # target의 cards에서 on_hit_dmg_reduction_burning 을 집계해 피해 배율을 반환한다 (F2).
@@ -89,9 +97,10 @@ static func apply_on_attack_aoe(
 			for u: Unit in splash_targets:
 				StatusEffects.add(u, StatusEffects.Type.BURN, card.on_attack_aoe_burn)
 		# [B] Burn MAX 충전 (Wildfire Storm 1단계)
+		# F4: MAX_STACK → u.burn_max so High Density (burn_max=7) is respected
 		if card.on_attack_aoe_fill_max:
 			for u: Unit in splash_targets:
-				var deficit: int = StatusEffects.MAX_STACK - StatusEffects.get_stacks(u, StatusEffects.Type.BURN)
+				var deficit: int = u.burn_max - StatusEffects.get_stacks(u, StatusEffects.Type.BURN)
 				if deficit > 0:
 					StatusEffects.add(u, StatusEffects.Type.BURN, deficit)
 		# [C] Burn 보유 적 전체 방어 무시 버스트 (Wildfire Storm 2단계: [B] 이후 갱신된 스택 반영)
