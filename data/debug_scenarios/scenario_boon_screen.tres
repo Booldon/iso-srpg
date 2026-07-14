@@ -4,8 +4,9 @@
 
 [resource]
 script = ExtResource("1_dbgscn")
-label = "카드 선택 테스트"
+label = "카드 선택 테스트 (Ember 보유 → Epic 후보 활성)"
 target_scene = "res://scenes/world/boon_screen.tscn"
 current_stage = 0
-active_cards = []
+active_cards = ["res://data/cards/card_ember.tres"]
 debug_player_cards = []
+stages_since_rare = 2

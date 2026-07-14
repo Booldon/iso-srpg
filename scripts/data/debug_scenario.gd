@@ -22,3 +22,8 @@ class_name DebugScenario
 ## Card .tres paths to inject into GameState.debug_player_cards so grid_manager
 ## attaches them to every player unit on placement.
 @export var debug_player_cards: Array[String] = []
+
+## Pity counter to inject into GameState.stages_since_rare.
+## 0 = fresh run (no pity). Set to rare_pity_hard_cap (default 3) to force Rare on next draw.
+## Useful for testing Epic: set high + ensure prerequisite cards are in active_cards.
+@export var stages_since_rare: int = 0

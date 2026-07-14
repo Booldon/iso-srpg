@@ -61,12 +61,14 @@ func _launch(scenario: DebugScenario) -> void:
 	GameState.current_stage        = scenario.current_stage
 	GameState.active_cards         = scenario.active_cards.duplicate()
 	GameState.debug_player_cards   = scenario.debug_player_cards.duplicate()
-	print("[DebugMenu] launching '%s' → %s  (stage=%d  cards=%d  debug_cards=%d)" % [
+	GameState.stages_since_rare    = scenario.stages_since_rare
+	print("[DebugMenu] launching '%s' → %s  (stage=%d  cards=%d  debug_cards=%d  pity=%d)" % [
 		scenario.label,
 		scenario.target_scene,
 		GameState.current_stage,
 		GameState.active_cards.size(),
 		GameState.debug_player_cards.size(),
+		GameState.stages_since_rare,
 	])
 	get_tree().change_scene_to_file(scenario.target_scene)
 
