@@ -18,12 +18,32 @@ func _ready() -> void:
 	var sd := GameState.current_stage_data()
 	_header.text = "%s 클리어!\n카드를 하나 선택하세요." % (sd.title if sd else "스테이지")
 
+	_roll_and_build()
+
+	if OS.is_debug_build():
+		_add_debug_reload_button()
+
+
+func _roll_and_build() -> void:
+	for child in _cards.get_children():
+		child.queue_free()
 	var pool  := _load_card_pool()
 	var owned := _owned_card_ids()
 	var tier  := CardDraw.roll_tier(CONFIG, GameState.stages_since_rare, _rng)
 	var picks := CardDraw.draw(CONFIG, pool, tier, owned, _rng)
-
 	_build_cards(picks)
+
+
+func _add_debug_reload_button() -> void:
+	var btn := Button.new()
+	btn.text = "[DEBUG] 다시 뽑기"
+	btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	btn.offset_left  = -200.0
+	btn.offset_top   = -56.0
+	btn.offset_right = -16.0
+	btn.offset_bottom = -16.0
+	btn.pressed.connect(_roll_and_build)
+	add_child(btn)
 
 
 # 전체 카드 풀 로드 (data/cards/ 디렉토리 스캔)
