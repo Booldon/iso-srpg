@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://earth_fractu0001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "fracture"
+title = "균열"
+description = "공격 시: 대상의 AMR을 자신의 현재 Guard 스택 수만큼 영구 차감."
+element = 3
+tier = 1
+on_attack_armor_shred_by_guard = true

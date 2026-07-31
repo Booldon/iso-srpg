@@ -180,7 +180,8 @@ func _run_enemy_turn(unit: Unit) -> void:
 
 
 func _resolve_full_attack(attacker: Unit, target: Unit, hit_armor: bool) -> void:
-	var dmg_mult := CardEffects.get_incoming_multiplier(attacker, target)
+	# F2 incoming(target측 피해 감소) × G2 outgoing(attacker측 피해 증폭, Center of Gravity)
+	var dmg_mult := CardEffects.get_incoming_multiplier(attacker, target) * CardEffects.get_outgoing_multiplier(attacker)
 	Combat.resolve_attack(attacker, target, hit_armor, dmg_mult)
 	CardEffects.apply_on_attack(attacker, target)
 	CardEffects.apply_on_hit(attacker, target)

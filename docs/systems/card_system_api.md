@@ -1,6 +1,6 @@
 # Card / Status-Effect System — API Contract
 
-**Version:** 1.5 (G1 — Earth/Guard baseline: stack→AMR, innate counter-damage, Earthen Bulwark/Smite/Thorn Armor)
+**Version:** 1.6 (G2 — Guard consume payoff: Crush, Cataclysm, Awakening of Earth, Fracture, Center of Gravity)
 **Date:** 2026-07-31  
 **Owner:** systems-designer  
 **Status:** Confirmed — implementation may begin
@@ -173,6 +173,30 @@ enum Tier { COMMON, RARE, EPIC }
 # 이 유닛(피격자)이 보유 시, innate Guard 반격 데미지에 곱할 배수 (Thorn Armor).
 # 여러 장 보유 시 곱셈적으로 합산. 1.0이면 no-op.
 @export var counter_damage_multiplier: float = 1.0
+
+# --- Guard 소비 버스트 (G2 슬라이스 — 구현됨) ---
+# attacker 자신의 Guard 스택을 소비한다 (target의 Burn을 소비하는 detonation과 반대 방향).
+@export var on_attack_consume_guard_self: int = 0        # Crush: 2
+# true면 자신 Guard 전량 소비 (Cataclysm 스타일). true면 on_attack_consume_guard_self는 무시됨.
+@export var on_attack_consume_all_guard_self: bool = false
+# 소비한 Guard 1스택당 방어 무시 STR 데미지. 소비가 없으면(둘 다 0/false) 0 사용.
+@export var on_attack_guard_burst_per_stack: int = 0      # Crush: 3, Cataclysm: 6
+
+# --- Guard 소비 반응 (G2 슬라이스 — 구현됨, Awakening of Earth) ---
+# attacker 자신의 Guard가 (같은 공격 중 다른 카드로) 소비될 때마다, 소비량 × 이 값만큼
+# 영구(이번 전투 한정) AMR을 획득한다. 0이면 no-op.
+@export var on_guard_consumed_gain_armor: int = 0
+
+# --- Guard 기반 영구 AMR 차감 (G2 슬라이스 — 구현됨, Fracture) ---
+# true면 공격 시 target의 AMR을 attacker의 (같은 공격의 Guard 소비 이후) 현재 Guard 스택 수만큼
+# 영구 차감한다 (소비 없음 — 자신의 스택은 그대로 유지).
+@export var on_attack_armor_shred_by_guard: bool = false
+
+# --- Guard 임계 공격력 보너스 (G2 슬라이스 — 구현됨, Center of Gravity) ---
+# attacker 자신의 Guard가 on_guard_threshold_dmg_bonus_min 이상이면 공격 데미지에 곱할 보너스
+# 비율. 0.2 = +20%. 0.0이면 no-op.
+@export var on_guard_threshold_dmg_bonus: float = 0.0
+@export var on_guard_threshold_dmg_bonus_min: int = 4
 ```
 
 ### CardData 불변 규칙
@@ -400,10 +424,28 @@ class_name CardEffects
 #   attacker.cards 순회: on_attack_guard_self > 0 인 카드마다
 #     StatusEffects.add(attacker, GUARD, card.on_attack_guard_self)  ← target이 아니라 attacker 자신
 #
-# 순서 불변 규칙: [1] Burn 부여 → [2] Detonation → [3] 틱 수정자 → [4] Guard 자가 부여. 순서 역전 금지.
+# [5] Guard 소비 버스트 (G2 신규 — target의 Burn이 아니라 **attacker 자신**의 Guard를 소비):
+#   attacker.cards 순회, on_attack_consume_guard_self > 0 또는 on_attack_consume_all_guard_self
+#   인 카드마다:
+#   a. 스택 소비:
+#       - on_attack_consume_all_guard_self == true → consumed = consume(attacker, GUARD, get_stacks(attacker, GUARD))
+#       - 아니면 consumed = consume(attacker, GUARD, card.on_attack_consume_guard_self)
+#   b. consumed <= 0이면 이 카드는 스킵 (버스트도 Awakening 트리거도 없음).
+#   c. 버스트 = consumed × card.on_attack_guard_burst_per_stack. burst > 0이면 target.take_str_damage(burst) (방어 무시).
+#   d. Awakening of Earth 트리거: attacker.cards 순회, on_guard_consumed_gain_armor > 0인 카드마다
+#       attacker.stats.armor += consumed × card.on_guard_consumed_gain_armor  (영구, 이번 전투 한정)
+#
+# [6] Fracture (G2 신규 — [5] 소비 이후 처리, attacker의 잔여 Guard를 읽음):
+#   attacker.cards 순회: on_attack_armor_shred_by_guard == true 인 카드마다
+#     g = get_stacks(attacker, GUARD); if g > 0: target.stats.armor = max(0, target.stats.armor - g)
+#   (소비하지 않음 — 같은 공격에 [5]의 소비 카드가 있었다면 그 이후 남은 스택 수를 그대로 읽는다.)
+#
+# 순서 불변 규칙: [1] Burn 부여 → [2] Detonation → [3] 틱 수정자 → [4] Guard 자가 부여 →
+#   [5] Guard 소비 버스트 → [6] Fracture. 순서 역전 금지 (Fracture가 [5]보다 먼저 오면 소비 전
+#   스택을 읽게 되어 결과가 달라짐).
 #
 # 호출 위치 (grid_manager._resolve_full_attack → _sweep_deaths):
-#   var dmg_mult := CardEffects.get_incoming_multiplier(attacker, target)
+#   var dmg_mult := CardEffects.get_incoming_multiplier(attacker, target) * CardEffects.get_outgoing_multiplier(attacker)  ← G2 갱신
 #   Combat.resolve_attack(attacker, target, hit_armor, dmg_mult)
 #   CardEffects.apply_on_attack(attacker, target)
 #   CardEffects.apply_on_hit(attacker, target)
@@ -413,6 +455,22 @@ class_name CardEffects
 #   grid_manager._refresh_burn_armor_debuffs()  ← F4 신규
 #   grid_manager._sweep_deaths()
 static func apply_on_attack(attacker: Unit, target: Unit) -> void
+
+
+# attacker의 cards에서 on_guard_threshold_dmg_bonus 를 집계해 공격 배율을 반환한다 (G2 신규,
+# Center of Gravity). get_incoming_multiplier()(F2, target측 피해 감소)와 반대 방향 — 이건
+# attacker측 피해 증폭.
+#
+# 계산:
+#   mult = 1.0
+#   attacker.cards 순회: on_guard_threshold_dmg_bonus > 0.0인 카드마다,
+#     if get_stacks(attacker, GUARD) >= card.on_guard_threshold_dmg_bonus_min: mult *= (1.0 + card.on_guard_threshold_dmg_bonus)
+#   return mult
+#
+# 반환값: float (1.0 = 보너스 없음, 1.2 = +20%). 여러 장 보유 시 곱셈 합산.
+# 적 유닛 카드 없음(cards==[]) → 항상 1.0 반환.
+# 호출 위치: grid_manager._resolve_full_attack() 내부, get_incoming_multiplier()와 곱해 dmg_mult로 사용.
+static func get_outgoing_multiplier(attacker: Unit) -> float
 
 
 # target의 cards에서 on_hit_dmg_reduction_burning > 0.0인 것을 집계해
@@ -552,18 +610,26 @@ func _refresh_burn_armor_debuffs() -> void
 | `scripts/data/card_data.gd` | combat-programmer | F4: `on_attack_burn_tick_multiplier`, `on_attack_burn_decay_slow`, `on_attack_burn_max_override`, `on_burn_threshold_armor_debuff`, `on_burn_threshold_armor_min` 추가 |
 | `data/cards/*.tres` | data-balancer | F4: `card_white_heat`, `card_smolder`, `card_high_density`, `card_brittle_coat` 추가 |
 | `scripts/battle/status_effects.gd` | combat-programmer | F4: `add()` BURN 상한 `unit.burn_max` 사용, `tick_turn_start()` 배수·감쇠 지연 갱신 |
-| `scripts/battle/card_effects.gd` | combat-programmer | F4: `apply_on_attack()` [3] 틱 수정자 블록 추가, detonation consume-all 버그 수정, aoe fill_max `unit.burn_max` 기준 갱신 |
+| `scripts/battle/card_effects.gd` | combat-programmer | F4: `apply_on_attack()` [3] 틱 수정자 블록 추가, detonation consume-all 버그 수정, aoe fill_max `unit.burn_max` 기준 갱신. G2: `apply_on_attack()` [5][6] 블록 추가, 신규 `get_outgoing_multiplier()` |
 | `scripts/battle/unit.gd` | combat-programmer | F4: `burn_max`, `burn_tick_mult_next`, `burn_decay_slowed`, `_burn_decay_skip`, `burn_armor_debuff` 필드, `effective_armor()` 추가 |
 | `scripts/battle/combat.gd` | combat-programmer | F4: strength-hit 경로가 `target.effective_armor()` 사용으로 갱신 |
-| `scripts/battle/grid_manager.gd` | combat-programmer | F4: `_setup_burn_caps()`, `_refresh_burn_armor_debuffs()` 추가; `_resolve_full_attack()` 끝·턴 시작 후 디버프 갱신 호출 추가. G1: `_place_players()` battle-start 루프에 `battle_start_guard` 적용, `_resolve_full_attack()`에 `apply_guard_counter()` 호출 추가 |
+| `scripts/battle/grid_manager.gd` | combat-programmer | F4: `_setup_burn_caps()`, `_refresh_burn_armor_debuffs()` 추가; `_resolve_full_attack()` 끝·턴 시작 후 디버프 갱신 호출 추가. G1: `_place_players()` battle-start 루프에 `battle_start_guard` 적용, `_resolve_full_attack()`에 `apply_guard_counter()` 호출 추가. G2: `_resolve_full_attack()`의 `dmg_mult`가 `get_outgoing_multiplier()`와 곱해지도록 갱신 |
 | `scenes/battle/*.tscn` | ui-programmer | 변경 없음 |
-| `scripts/battle/stats_panel.gd` | ui-programmer | F4: AMR 표시에 `burn_armor_debuff` 병기 (예: `ARM  3 (-2)`). G1: Guard 스택 보유 시 AMR에 `(+N)` 병기 + `GUARD N` 표시 |
+| `scripts/battle/stats_panel.gd` | ui-programmer | F4: AMR 표시에 `burn_armor_debuff` 병기 (예: `ARM  3 (-2)`). G1: Guard 스택 보유 시 AMR에 `(+N)` 병기 + `GUARD N` 표시. G2: 변경 없음(영구 AMR 변화는 `stats.armor` 자체를 갱신하므로 기존 표시로 자동 반영됨) |
 | `docs/systems/card_system_api.md` | systems-designer | 이 문서 (계약 변경 시 먼저 여기 업데이트) |
 
 G1 신규: `card_data.gd`에 `battle_start_guard` / `on_attack_guard_self` / `counter_damage_multiplier` 추가.
 `card_effects.gd`에 `apply_on_attack()` [4] Guard 자가 부여 블록 + 신규 `apply_guard_counter()` 추가.
 `unit.gd`의 `effective_armor()`가 Guard 스택을 합산하도록 갱신 (별도 신규 필드는 없음 — `StatusEffects.get_stacks()` 직접 조회).
 `data/cards/*.tres`(data-balancer)에 `card_earthen_bulwark`, `card_earthen_smite`, `card_thorn_armor` 추가.
+
+G2 신규: `card_data.gd`에 `on_attack_consume_guard_self` / `on_attack_consume_all_guard_self` /
+`on_attack_guard_burst_per_stack` / `on_guard_consumed_gain_armor` / `on_attack_armor_shred_by_guard` /
+`on_guard_threshold_dmg_bonus` / `on_guard_threshold_dmg_bonus_min` 추가.
+`card_effects.gd`에 `apply_on_attack()` [5](Guard 소비 버스트 + Awakening 트리거) [6](Fracture) 블록 +
+신규 `get_outgoing_multiplier()` 추가. `data/cards/*.tres`(data-balancer)에 `card_crush`,
+`card_cataclysm`(Epic, prerequisite: crush), `card_awakening_of_earth`, `card_fracture`,
+`card_center_of_gravity` 추가.
 
 ---
 
@@ -586,30 +652,38 @@ G1 신규: `card_data.gd`에 `battle_start_guard` / `on_attack_guard_self` / `co
 | strength-hit 유효 방어 | `target.effective_armor()` = `max(0, armor + guard_stacks - burn_armor_debuff)` | Brittle Coat 지속 디버프 + Guard 스택 보너스 반영 (G1) |
 | 사망 판정 책임 | grid_manager (`tick_turn_start` / `apply_on_attack` 호출 후 `is_alive()` 체크) | StatusEffects / CardEffects는 stats만 수정 |
 | Guard 반격 데미지 | `stacks × 1 × counter_mult` 방어 무시 (고정값) | decisions_log "Earth counter-damage coefficient reduced: ×2 → ×1 (2026-07-12)" — innate 효과, 스택 소비 없음 |
+| Guard 소비 버스트 | 소비량 × `on_attack_guard_burst_per_stack` 방어 무시 (고정값) | Fire의 detonation과 동일 컨벤션 — 스탯 비례 없음 (G2) |
+| Fracture 처리 순서 | apply_on_attack의 [5](Guard 소비) 이후, [6]에서 attacker의 잔여 Guard를 읽음 | 같은 공격에 소비 카드(Crush 등)가 있으면 소비 후 값을 읽어야 결과가 모호해지지 않음 (G2) |
+| Awakening of Earth 획득 AMR | 영구(이번 전투 한정), `stats.armor`에 직접 합산 | battle_start_armor_bonus와 동일하게 base stats 수정 — temp 버퍼 아님 (G2) |
 
 ---
 
 ## 미래 확장 계약 (예약 공간 — 현재 슬라이스에서 구현하지 않음)
 
 구현 완료 슬라이스: F1(detonation+temp STR+Solar), F2(반응형 방어), F3(AoE+on-death 전이), F4(틱 수정자),
-G1(Guard 기반: 스택→AMR + innate 반격, Earthen Bulwark/Smite/Thorn Armor).
+G1(Guard 기반: 스택→AMR + innate 반격, Earthen Bulwark/Smite/Thorn Armor),
+G2(Guard 소비 페이오프: Crush/Cataclysm/Awakening of Earth/Fracture/Center of Gravity).
 → 해당 필드는 모두 계약 A CardData 스키마 참고.
 
 **참고:** G1 계획 당시 예약해 두었던 `on_hit_guard` / `on_hit_counter_damage_multiplier` 필드명은
 실제 구현에서 `battle_start_guard` / `on_attack_guard_self` / `counter_damage_multiplier`로
 확정됐다 (반격이 `on_hit`이 아니라 innate 효과로 처리되어 게이팅 카드 필드가 불필요해짐).
+**참고:** G1 로드맵이 예상했던 `on_attack_consume_guard` 필드명은 실제 구현에서
+`on_attack_consume_guard_self`(+`_all_` 변형)로 확정됐다 (target의 Burn을 소비하는 detonation과
+방향이 반대라는 점을 필드명에서 명확히 하기 위함). Center of Gravity는 원래 G3 로드맵 후보였으나
+Guard 임계 조건부 효과라는 성격상 G2의 소비 페이오프 묶음에 함께 구현했다.
 
-### G2~G4 예상 필드 (earth_cards.md 기준 — 다음 슬라이스에서 확정)
+### G3~G4 예상 필드 (earth_cards.md 기준 — 다음 슬라이스에서 확정)
 
-- **G2 (Guard 소비 페이오프):** Crush/Cataclysm류 소비-버스트 필드 (Fire의 detonation 필드와 유사한
-  `on_attack_consume_guard` / `on_attack_guard_burst_per_stack` 패턴 예상), 적 AMR 영구 차감(Fracture).
-- **G3 (반응/임계 방어 + 아군):** Guard≥N 임계 조건부 효과(Bedrock/Center of Gravity), 저HP 트리거
-  (Unshakable Will), 인접 아군 소비-전이(Earthen Bond) — F2 반응형 패턴과 유사.
+- **G3 (반응/임계 방어 + 아군):** Bedrock(Guard≥4→피해 -20%, get_incoming_multiplier와 유사),
+  Unshakable Will(저HP 트리거로 Guard 만충), Earthen Bond(인접 아군 피격 시 소비→아군 AMR),
+  Earthen Empathy/Provoke(Guard≥3 임계) — F2 반응형 패턴과 유사.
 - **G4 (Growth + AoE + 고급):** 턴종료 훅 신규 필요(Earthen Nourishment 등 Growth 계열),
-  적 AI 타겟 override 신규 필요(Provoke/Impenetrable Fortress).
+  적 AI 타겟 override 신규 필요(Provoke/Impenetrable Fortress), Tremor(AoE), Binding Roots(위치 교환).
 
 ### StatusEffects에 추가될 동작
 
 - **FROST (Type = 1):** SPD 감소 + 임계 시 Freeze (행동 취소) — Frost 슬라이스에서 명세
 - **GUARD (Type = 2):** G1에서 "AMR 증가"(`effective_armor()`) + "피격 시 반격"(`apply_guard_counter()`)
-  구현 완료. 자연 감쇠 없음(불변 규칙 참고). G2~G4의 소비/임계 동작은 이후 슬라이스에서 명세.
+  구현 완료. G2에서 "소비→버스트/영구 AMR/영구 AMR 차감/임계 공격력 보너스" 구현 완료.
+  자연 감쇠 없음(불변 규칙 참고). G3~G4의 반응/임계 동작은 이후 슬라이스에서 명세.

@@ -4,26 +4,21 @@ class_name CardEffects
 const GUARD_COUNTER_PER_STACK: int = 1
 
 
-# attacker의 cards 배열을 순회하며 공격 시(on_attack) 효과를 target에 적용한다.
+# attacker의 cards 배열을 순회하며 공격 시(on_attack) 효과를 target/attacker에 적용한다.
 #
-# 처리 순서 (카드별, [1] → [2]):
+# 처리 순서 (카드별, [1] → [6], 순서 역전 금지):
 #
-# [1] Burn 부여 (Burn 슬라이스 — 기존):
-#   - on_attack_burn > 0:
-#       Kindling 규칙(requires_burning == true)이고 target Burn = 0이면 스킵.
-#       아니면 StatusEffects.add(target, BURN, card.on_attack_burn).
+# [1] Burn 부여 (target의 Burn 스택 증가)
+# [2] Detonation / burst (target의 Burn 소비 → 방어 무시 데미지, F1)
+# [3] F4 틱 수정자 (target.burn_tick_mult_next / burn_decay_slowed 설정)
+# [4] Guard 자가 부여 (attacker 자신의 Guard 스택 증가, G1: Earthen Smite)
+# [5] Guard 소비 버스트 (attacker 자신의 Guard 소비 → target 방어 무시 데미지 + Awakening 트리거, G2)
+# [6] Fracture (attacker의 [5] 소비 이후 잔여 Guard만큼 target AMR 영구 차감, G2)
 #
-# [2] Detonation / burst (F1 슬라이스 — 신규):
-#   a. 게이트: on_attack_min_burn > 0 이고 target Burn < on_attack_min_burn → 이 카드 스킵.
-#   b. 소비: on_attack_consume_all_burn이면 전량, 아니면 on_attack_consume_burn 수만큼.
-#   c. 버스트 = consumed × burst_per_stack + burst_flat.
-#   d. burst > 0이면 target.take_str_damage(burst)  (방어 무시).
-#
-# 적 유닛은 cards == [] 이므로 자동 no-op.
-# 기본값(모두 0/false)인 카드는 [1][2] 양쪽 모두 no-op.
+# 적 유닛은 cards == [] 이므로 자동 no-op. 기본값(모두 0/false)인 카드는 전 단계 no-op.
 #
 # 호출 위치 (grid_manager):
-#   Combat.resolve_attack(attacker, target, hit_armor)
+#   Combat.resolve_attack(attacker, target, hit_armor, dmg_mult)
 #   CardEffects.apply_on_attack(attacker, target)
 #   if not target.is_alive(): _kill_unit(target)
 static func apply_on_attack(attacker: Unit, target: Unit) -> void:
@@ -69,6 +64,45 @@ static func apply_on_attack(attacker: Unit, target: Unit) -> void:
 	for card: CardData in attacker.cards:
 		if card.on_attack_guard_self > 0:
 			StatusEffects.add(attacker, StatusEffects.Type.GUARD, card.on_attack_guard_self)
+
+	# [5] Guard 소비 버스트 (G2: Crush/Cataclysm) — attacker 자신의 Guard 소비, target에 방어 무시 데미지
+	for card: CardData in attacker.cards:
+		var has_guard_consume := card.on_attack_consume_guard_self > 0 or card.on_attack_consume_all_guard_self
+		if not has_guard_consume:
+			continue
+		var consumed: int = 0
+		if card.on_attack_consume_all_guard_self:
+			consumed = StatusEffects.consume(attacker, StatusEffects.Type.GUARD, StatusEffects.get_stacks(attacker, StatusEffects.Type.GUARD))
+		else:
+			consumed = StatusEffects.consume(attacker, StatusEffects.Type.GUARD, card.on_attack_consume_guard_self)
+		if consumed <= 0:
+			continue
+		var burst: int = consumed * card.on_attack_guard_burst_per_stack
+		if burst > 0:
+			target.take_str_damage(burst)
+		# Awakening of Earth: 이 소비에 반응해 attacker 자신 영구 AMR 획득
+		for c2: CardData in attacker.cards:
+			if c2.on_guard_consumed_gain_armor > 0:
+				attacker.stats.armor += consumed * c2.on_guard_consumed_gain_armor
+
+	# [6] Fracture (G2) — [5] 소비 이후 attacker의 잔여 Guard만큼 target AMR 영구 차감 (소비 없음)
+	for card: CardData in attacker.cards:
+		if card.on_attack_armor_shred_by_guard:
+			var g: int = StatusEffects.get_stacks(attacker, StatusEffects.Type.GUARD)
+			if g > 0:
+				target.stats.armor = maxi(0, target.stats.armor - g)
+
+
+# attacker의 cards에서 on_guard_threshold_dmg_bonus 를 집계해 공격 배율을 반환한다 (G2, Center of
+# Gravity). get_incoming_multiplier()(F2, target측 피해 감소)와 반대 방향 — 이건 attacker측
+# 피해 증폭. 반환값: float (1.0 = 보너스 없음). Combat.resolve_attack(dmg_mult)에 전달.
+static func get_outgoing_multiplier(attacker: Unit) -> float:
+	var mult := 1.0
+	for card: CardData in attacker.cards:
+		if card.on_guard_threshold_dmg_bonus > 0.0:
+			if StatusEffects.get_stacks(attacker, StatusEffects.Type.GUARD) >= card.on_guard_threshold_dmg_bonus_min:
+				mult *= (1.0 + card.on_guard_threshold_dmg_bonus)
+	return mult
 
 
 # target의 cards에서 on_hit_dmg_reduction_burning 을 집계해 피해 배율을 반환한다 (F2).

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://earth_catac0001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "cataclysm"
+title = "대격변"
+description = "공격 시: 자신 Guard 전량 소비 → 스택당 6, 방어 무시 데미지."
+element = 3
+tier = 2
+prerequisite_card_ids = ["crush"]
+on_attack_consume_all_guard_self = true
+on_attack_guard_burst_per_stack = 6

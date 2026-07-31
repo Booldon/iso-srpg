@@ -117,3 +117,27 @@ enum Tier { COMMON, RARE, EPIC }
 # 이 유닛(피격자)이 보유 시, innate Guard 반격 데미지에 곱할 배수 (Thorn Armor).
 # 여러 장 보유 시 곱셈적으로 합산. 1.0이면 no-op.
 @export var counter_damage_multiplier: float = 1.0
+
+# --- Guard 소비 버스트 (G2 슬라이스 — 구현됨) ---
+# attacker 자신의 Guard 스택을 소비한다 (target의 Burn을 소비하는 detonation과 반대 방향).
+@export var on_attack_consume_guard_self: int = 0        # Crush: 2
+# true면 자신 Guard 전량 소비 (Cataclysm 스타일). true면 on_attack_consume_guard_self는 무시됨.
+@export var on_attack_consume_all_guard_self: bool = false
+# 소비한 Guard 1스택당 방어 무시 STR 데미지. 소비가 없으면(둘 다 0/false) 0 사용.
+@export var on_attack_guard_burst_per_stack: int = 0      # Crush: 3, Cataclysm: 6
+
+# --- Guard 소비 반응 (G2 슬라이스 — 구현됨, Awakening of Earth) ---
+# attacker 자신의 Guard가 (같은 공격 중 다른 카드로) 소비될 때마다, 소비량 × 이 값만큼
+# 영구(이번 전투 한정) AMR을 획득한다. 0이면 no-op.
+@export var on_guard_consumed_gain_armor: int = 0
+
+# --- Guard 기반 영구 AMR 차감 (G2 슬라이스 — 구현됨, Fracture) ---
+# true면 공격 시 target의 AMR을 attacker의 (같은 공격의 Guard 소비 이후) 현재 Guard 스택 수만큼
+# 영구 차감한다 (소비 없음 — 자신의 스택은 그대로 유지).
+@export var on_attack_armor_shred_by_guard: bool = false
+
+# --- Guard 임계 공격력 보너스 (G2 슬라이스 — 구현됨, Center of Gravity) ---
+# attacker 자신의 Guard가 on_guard_threshold_dmg_bonus_min 이상이면 공격 데미지에 곱할 보너스
+# 비율. 0.2 = +20%. 0.0이면 no-op.
+@export var on_guard_threshold_dmg_bonus: float = 0.0
+@export var on_guard_threshold_dmg_bonus_min: int = 4

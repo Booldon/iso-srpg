@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://earth_crush0001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "crush"
+title = "짓누르기"
+description = "공격 시: 자신 Guard 2스택 소비 → 스택당 3, 방어 무시 데미지."
+element = 3
+tier = 1
+on_attack_consume_guard_self = 2
+on_attack_guard_burst_per_stack = 3

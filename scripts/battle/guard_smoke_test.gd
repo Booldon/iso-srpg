@@ -1,4 +1,4 @@
-## 헤드리스 스모크 테스트 — Earth G1 (Guard 기반 슬라이스) 로직 검증
+## 헤드리스 스모크 테스트 — Earth G1+G2 (Guard 기반/소비 슬라이스) 로직 검증
 ## 실행: Godot 에디터 > 이 파일 열기 > 우상단 "실행" 아이콘
 ## 또는 헤드리스: godot --headless --script res://scripts/battle/guard_smoke_test.gd
 ## 테스트 프레임워크(GUT) 없이 print+assert 방식. 실패 시 FAIL 출력.
@@ -33,7 +33,7 @@ func _make_unit(base_str: int, base_armor: int = 0) -> Unit:
 
 
 func _init() -> void:
-	print("\n=== Earth G1 (Guard) Smoke Test ===\n")
+	print("\n=== Earth G1+G2 (Guard) Smoke Test ===\n")
 
 	# ─ 블록 A: Guard 스택 → effective_armor ───────────────────────────────────
 	print("-- A: Guard stacks raise effective_armor --")
@@ -101,6 +101,96 @@ func _init() -> void:
 	# 반복 공격 시 누적
 	CardEffects.apply_on_attack(smite_attacker, smite_target)
 	_check("second attack: Guard accumulates to 2", StatusEffects.get_stacks(smite_attacker, StatusEffects.Type.GUARD) == 2)
+
+	# ─ 블록 G: Crush — attacker 자신의 Guard 소비 → target 방어 무시 버스트 ────
+	print("\n-- G: Crush (on_attack_consume_guard_self) --")
+	var crush_attacker := _make_unit(10, 0)
+	var crush_target := _make_unit(20, 5)
+	StatusEffects.add(crush_attacker, StatusEffects.Type.GUARD, 3)
+	var crush := CardData.new()
+	crush.on_attack_consume_guard_self = 2
+	crush.on_attack_guard_burst_per_stack = 3
+	crush_attacker.cards = [crush]
+	CardEffects.apply_on_attack(crush_attacker, crush_target)
+	_check("Crush consumes 2 of 3: attacker Guard now 1", StatusEffects.get_stacks(crush_attacker, StatusEffects.Type.GUARD) == 1)
+	_check("Crush burst = 2x3=6, armor ignored: target STR 20-6=14", crush_target.stats.strength == 14)
+
+	# ─ 블록 H: 전량 소비 (Cataclysm 패턴) ──────────────────────────────────────
+	print("\n-- H: consume-all (Cataclysm pattern) --")
+	var cat_attacker := _make_unit(10, 0)
+	var cat_target := _make_unit(40, 5)
+	StatusEffects.add(cat_attacker, StatusEffects.Type.GUARD, 5)
+	var cataclysm := CardData.new()
+	cataclysm.on_attack_consume_all_guard_self = true
+	cataclysm.on_attack_guard_burst_per_stack = 6
+	cat_attacker.cards = [cataclysm]
+	CardEffects.apply_on_attack(cat_attacker, cat_target)
+	_check("Cataclysm consumes all 5: attacker Guard now 0", StatusEffects.get_stacks(cat_attacker, StatusEffects.Type.GUARD) == 0)
+	_check("Cataclysm burst = 5x6=30, armor ignored: target STR 40-30=10", cat_target.stats.strength == 10)
+
+	# ─ 블록 I: Awakening of Earth — Guard 소비에 반응해 영구 AMR 획득 ─────────
+	print("\n-- I: Awakening of Earth (on_guard_consumed_gain_armor) --")
+	var awaken_attacker := _make_unit(10, 2)
+	var awaken_target := _make_unit(20, 0)
+	StatusEffects.add(awaken_attacker, StatusEffects.Type.GUARD, 3)
+	var crush2 := CardData.new()
+	crush2.on_attack_consume_guard_self = 2
+	crush2.on_attack_guard_burst_per_stack = 3
+	var awakening := CardData.new()
+	awakening.on_guard_consumed_gain_armor = 1
+	awaken_attacker.cards = [crush2, awakening]
+	CardEffects.apply_on_attack(awaken_attacker, awaken_target)
+	_check("Awakening: 2 consumed x 1 = permanent AMR +2 (base 2 -> 4)", awaken_attacker.stats.armor == 4)
+	_check("Crush burst still applies alongside Awakening: target STR 20-6=14", awaken_target.stats.strength == 14)
+
+	# ─ 블록 J: Fracture — [5] 소비 이후 잔여 Guard로 target AMR 영구 차감 ─────
+	print("\n-- J: Fracture (on_attack_armor_shred_by_guard) --")
+	var fr_attacker := _make_unit(10, 0)
+	var fr_target := _make_unit(20, 8)
+	StatusEffects.add(fr_attacker, StatusEffects.Type.GUARD, 3)
+	var fracture := CardData.new()
+	fracture.on_attack_armor_shred_by_guard = true
+	fr_attacker.cards = [fracture]
+	CardEffects.apply_on_attack(fr_attacker, fr_target)
+	_check("Fracture alone (no consume card): target AMR 8-3=5", fr_target.stats.armor == 5)
+
+	# 순서 규칙: 같은 attacker가 Crush(소비)도 함께 들고 있으면 Fracture는 소비 '이후' 값을 읽는다.
+	var fr2_attacker := _make_unit(10, 0)
+	var fr2_target := _make_unit(30, 8)
+	StatusEffects.add(fr2_attacker, StatusEffects.Type.GUARD, 5)
+	var crush3 := CardData.new()
+	crush3.on_attack_consume_guard_self = 2
+	crush3.on_attack_guard_burst_per_stack = 3
+	var fracture2 := CardData.new()
+	fracture2.on_attack_armor_shred_by_guard = true
+	fr2_attacker.cards = [crush3, fracture2]
+	CardEffects.apply_on_attack(fr2_attacker, fr2_target)
+	_check("order rule: Crush consumes 2 (5->3); Fracture reads POST-consume 3, not pre-consume 5: target AMR 8-3=5", fr2_target.stats.armor == 5)
+	_check("order rule: Crush burst also applied (2x3=6): target STR 30-6=24", fr2_target.stats.strength == 24)
+
+	# ─ 블록 K: Center of Gravity — get_outgoing_multiplier() ─────────────────
+	print("\n-- K: Center of Gravity (get_outgoing_multiplier) --")
+	var cog_attacker := _make_unit(10, 0)
+	var cog := CardData.new()
+	cog.on_guard_threshold_dmg_bonus = 0.2
+	cog.on_guard_threshold_dmg_bonus_min = 4
+	cog_attacker.cards = [cog]
+	StatusEffects.add(cog_attacker, StatusEffects.Type.GUARD, 3)
+	_check("Guard(3) < min(4): outgoing multiplier == 1.0", is_equal_approx(CardEffects.get_outgoing_multiplier(cog_attacker), 1.0))
+	StatusEffects.add(cog_attacker, StatusEffects.Type.GUARD, 1)
+	_check("Guard(4) >= min(4): outgoing multiplier == 1.2", is_equal_approx(CardEffects.get_outgoing_multiplier(cog_attacker), 1.2))
+
+	# 여러 장 보유 시 곱셈 합산 확인
+	var cog_attacker2 := _make_unit(10, 0)
+	var cog2a := CardData.new()
+	cog2a.on_guard_threshold_dmg_bonus = 0.2
+	cog2a.on_guard_threshold_dmg_bonus_min = 4
+	var cog2b := CardData.new()
+	cog2b.on_guard_threshold_dmg_bonus = 0.2
+	cog2b.on_guard_threshold_dmg_bonus_min = 4
+	cog_attacker2.cards = [cog2a, cog2b]
+	StatusEffects.add(cog_attacker2, StatusEffects.Type.GUARD, 4)
+	_check("two Center of Gravity cards stack multiplicatively: 1.2 x 1.2 = 1.44", is_equal_approx(CardEffects.get_outgoing_multiplier(cog_attacker2), 1.44))
 
 	# ─ 최종 결과 ─────────────────────────────────────────────────────────────
 	print("\n=== Result: %d PASS / %d FAIL ===" % [_pass, _fail])

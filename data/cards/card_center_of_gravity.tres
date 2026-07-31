@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://earth_cog000001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "center_of_gravity"
+title = "무게중심"
+description = "자신 Guard 4 이상일 때: 공격 데미지 +20%."
+element = 3
+tier = 1
+on_guard_threshold_dmg_bonus = 0.2
+on_guard_threshold_dmg_bonus_min = 4

@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://earth_awaken0001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "awakening_of_earth"
+title = "흙의 각성"
+description = "자신의 Guard가 소비될 때마다, 소비량만큼 영구 AMR 획득 (이번 전투 한정)."
+element = 3
+tier = 1
+on_guard_consumed_gain_armor = 1
