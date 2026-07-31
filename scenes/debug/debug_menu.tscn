@@ -20,9 +20,16 @@ offset_bottom = 56.0
 text = "🛠 DEBUG — 시나리오 선택"
 theme_override_font_sizes/font_size = 24
 
+[node name="CustomCardsButton" type="Button" parent="."]
+offset_left = 40.0
+offset_top = 60.0
+offset_right = 760.0
+offset_bottom = 100.0
+text = "🃏 카드 직접 선택 (커스텀 조합)"
+
 [node name="ScrollContainer" type="ScrollContainer" parent="."]
 offset_left = 40.0
-offset_top = 72.0
+offset_top = 108.0
 offset_right = 760.0
 offset_bottom = 520.0
 

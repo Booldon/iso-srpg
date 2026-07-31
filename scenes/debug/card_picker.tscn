@@ -1,0 +1,74 @@
+[gd_scene format=3 uid="uid://c2fwhdw36k441"]
+
+[ext_resource type="Script" path="res://scripts/debug/card_picker.gd" id="1_pick"]
+
+[node name="CardPicker" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_pick")
+
+[node name="Background" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.05, 0.05, 0.08, 1)
+
+[node name="Header" type="Label" parent="."]
+offset_left = 40.0
+offset_top = 20.0
+offset_right = 760.0
+offset_bottom = 56.0
+text = "🃏 DEBUG — 카드 직접 선택"
+theme_override_font_sizes/font_size = 24
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+offset_left = 40.0
+offset_top = 72.0
+offset_right = 760.0
+offset_bottom = 520.0
+
+[node name="CardList" type="VBoxContainer" parent="ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="DetailPanel" type="PanelContainer" parent="."]
+offset_left = 780.0
+offset_top = 72.0
+offset_right = 1240.0
+offset_bottom = 520.0
+
+[node name="DetailMargin" type="MarginContainer" parent="DetailPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="DetailLabel" type="Label" parent="DetailPanel/DetailMargin"]
+layout_mode = 2
+text = "카드에 마우스를 올리면 설명이 여기 표시됩니다."
+autowrap_mode = 3
+
+[node name="Footer" type="HBoxContainer" parent="."]
+offset_left = 40.0
+offset_top = 534.0
+offset_right = 760.0
+offset_bottom = 580.0
+theme_override_constants/separation = 12
+
+[node name="BackButton" type="Button" parent="Footer"]
+layout_mode = 2
+custom_minimum_size = Vector2(120, 40)
+text = "뒤로"
+
+[node name="CountLabel" type="Label" parent="Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+text = "선택: 0장"
+horizontal_alignment = 1
+
+[node name="StartButton" type="Button" parent="Footer"]
+layout_mode = 2
+custom_minimum_size = Vector2(160, 40)
+text = "전투 시작"

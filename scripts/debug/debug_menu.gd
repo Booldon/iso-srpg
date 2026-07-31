@@ -7,15 +7,18 @@ extends Control
 ## Only reachable from: title "TEST MODE" button (debug builds) or F1 hotkey.
 ## Adding a new test case = drop a new .tres in data/debug_scenarios/; no code edit needed.
 
-const SCENARIO_DIR := "res://data/debug_scenarios/"
-const TITLE_SCENE  := "res://scenes/world/title.tscn"
+const SCENARIO_DIR    := "res://data/debug_scenarios/"
+const TITLE_SCENE     := "res://scenes/world/title.tscn"
+const CARD_PICKER_SCENE := "res://scenes/debug/card_picker.tscn"
 
 @onready var _scenario_list: VBoxContainer = $ScrollContainer/ScenarioList
 @onready var _exit_btn: Button              = $Footer/ExitButton
+@onready var _custom_cards_btn: Button      = $CustomCardsButton
 
 
 func _ready() -> void:
 	_exit_btn.pressed.connect(_on_exit)
+	_custom_cards_btn.pressed.connect(_on_custom_cards)
 	_build_scenario_list()
 
 
@@ -76,3 +79,7 @@ func _launch(scenario: DebugScenario) -> void:
 func _on_exit() -> void:
 	GameState.exit_debug_mode()
 	get_tree().change_scene_to_file(TITLE_SCENE)
+
+
+func _on_custom_cards() -> void:
+	get_tree().change_scene_to_file(CARD_PICKER_SCENE)
