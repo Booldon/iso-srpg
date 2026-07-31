@@ -31,6 +31,13 @@ var burn_decay_slowed: bool = false   # Smolder: if true, natural decay fires ev
 var _burn_decay_skip: bool = false    # Smolder internal toggle; managed by tick_turn_start()
 var burn_armor_debuff: int = 0    # Brittle Coat: AMR reduction set by _refresh_burn_armor_debuffs()
 
+# G3 runtime fields — initialized at placement, discarded on battle end. Never saved to .tres.
+var battle_max_strength: int = 0       # Unshakable Will 비율 기준: 배치 직후 effective_strength() 스냅샷
+var unshakable_will_used: bool = false # Unshakable Will: 전투당 1회 가드
+var temp_armor_bonus: int = 0          # Earthen Bond: 이번 피격 한정 AMR, Combat.resolve_attack() 직후 0으로 리셋
+var guard_ally_armor_bonus: int = 0    # Earthen Empathy: _refresh_guard_ally_bonuses()가 매번 재계산
+var guard_counter_bonus_pending: bool = false  # Retaliatory Strike: 반격 성공 시 true, 다음 공격에서 소비
+
 
 # Returns effective Strength = base stats.strength + temp_strength.
 # Used for both attack power (Combat.resolve_attack) and death check (is_alive).
@@ -38,13 +45,16 @@ func effective_strength() -> int:
 	return stats.strength + temp_strength
 
 
-# Returns effective Armor = max(0, stats.armor + guard_stacks - burn_armor_debuff).
-# Guard stacks (G1) raise effective AMR by 1 per stack; Brittle Coat debuff still subtracts.
+# Returns effective Armor = max(0, stats.armor + guard_stacks + temp_armor_bonus
+#   + guard_ally_armor_bonus - burn_armor_debuff).
+# Guard stacks (G1) raise effective AMR by 1 per stack; Brittle Coat debuff still subtracts;
+# temp_armor_bonus (G3: Earthen Bond, one-hit) and guard_ally_armor_bonus (G3: Earthen Empathy,
+# continuous) both add.
 # Used in the strength-hit path of Combat.resolve_attack(). Read-only — does not modify state.
 # armor-hit (direct stats.armor deduction) bypasses this method.
 func effective_armor() -> int:
 	var guard := StatusEffects.get_stacks(self, StatusEffects.Type.GUARD)
-	return maxi(0, stats.armor + guard - burn_armor_debuff)
+	return maxi(0, stats.armor + guard + temp_armor_bonus + guard_ally_armor_bonus - burn_armor_debuff)
 
 
 # Returns true if this unit is still alive (effective_strength > 0).

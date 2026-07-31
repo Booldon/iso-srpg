@@ -141,3 +141,33 @@ enum Tier { COMMON, RARE, EPIC }
 # 비율. 0.2 = +20%. 0.0이면 no-op.
 @export var on_guard_threshold_dmg_bonus: float = 0.0
 @export var on_guard_threshold_dmg_bonus_min: int = 4
+
+# --- Guard 임계 피해 감소 (G3 슬라이스 — 구현됨, Bedrock) ---
+# target 자신의 Guard가 이 값 이상이면 받는 피해에 곱할 감소 비율. 0.2 = -20%. 0.0이면 no-op.
+# on_hit_dmg_reduction_burning(F2, attacker의 Burn 기준)과 달리 target 자신의 Guard가 조건.
+@export var on_guard_threshold_dmg_reduction: float = 0.0
+@export var on_guard_threshold_dmg_reduction_min: int = 4
+
+# --- 저HP 1회성 Guard 만충 (G3 슬라이스 — 구현됨, Unshakable Will) ---
+# true면 이 유닛의 effective_strength() / battle_max_strength 비율이 on_low_str_threshold
+# 이하로 떨어졌을 때(전투당 1회) Guard를 즉시 만충시킨다. 0.0/false면 no-op.
+@export var on_low_str_fill_guard: bool = false
+@export var on_low_str_threshold: float = 0.3
+
+# --- 인접 아군 피격 시 1회성 AMR 부여, 자신 Guard 소비 (G3 슬라이스 — 구현됨, Earthen Bond) ---
+# 인접한 아군이 피격될 때, 자신의 Guard를 on_adjacent_ally_hit_guard_cost만큼 소비해
+# 그 아군에게 이번 피격 한정 AMR 보너스(on_adjacent_ally_hit_armor_bonus)를 부여한다.
+# 자신 Guard가 cost 미만이면 발동하지 않는다. 0이면 no-op.
+@export var on_adjacent_ally_hit_guard_cost: int = 0
+@export var on_adjacent_ally_hit_armor_bonus: int = 0
+
+# --- Guard 임계 인접 아군 지속 AMR 보너스 (G3 슬라이스 — 구현됨, Earthen Empathy) ---
+# 자신의 Guard가 on_guard_threshold_ally_armor_bonus_min 이상인 동안, 인접한 아군 전원이
+# 이 값만큼 AMR 보너스를 지속적으로 받는다 (조건이 깨지면 즉시 사라짐). 0이면 no-op.
+@export var on_guard_threshold_ally_armor_bonus: int = 0
+@export var on_guard_threshold_ally_armor_bonus_min: int = 3
+
+# --- 반격 성공 후 다음 공격 데미지 보너스 (G3 슬라이스 — 구현됨, Retaliatory Strike) ---
+# 이 유닛의 Guard 반격이 발동했을 때 세팅되는 unit.guard_counter_bonus_pending이 true이면,
+# 다음 자신의 공격 데미지에 이 값만큼 보너스를 곱한다. 0.5 = +50%. 0.0이면 no-op.
+@export var on_retaliation_dmg_bonus: float = 0.0

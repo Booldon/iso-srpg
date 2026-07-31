@@ -93,26 +93,37 @@ static func apply_on_attack(attacker: Unit, target: Unit) -> void:
 				target.stats.armor = maxi(0, target.stats.armor - g)
 
 
-# attacker의 cards에서 on_guard_threshold_dmg_bonus 를 집계해 공격 배율을 반환한다 (G2, Center of
-# Gravity). get_incoming_multiplier()(F2, target측 피해 감소)와 반대 방향 — 이건 attacker측
-# 피해 증폭. 반환값: float (1.0 = 보너스 없음). Combat.resolve_attack(dmg_mult)에 전달.
+# attacker의 cards에서 on_guard_threshold_dmg_bonus(G2, Center of Gravity) 및
+# on_retaliation_dmg_bonus(G3, Retaliatory Strike)를 집계해 공격 배율을 반환한다.
+# get_incoming_multiplier()(F2/G3, target측 피해 감소)와 반대 방향 — 이건 attacker측 피해 증폭.
+#
+# Retaliatory Strike: attacker.guard_counter_bonus_pending을 읽기만 한다 — 이 함수는 순수 함수로
+# 유지하고, 플래그 리셋(소비)은 호출자(grid_manager._resolve_full_attack)가 담당한다.
+#
+# 반환값: float (1.0 = 보너스 없음). Combat.resolve_attack(dmg_mult)에 전달.
 static func get_outgoing_multiplier(attacker: Unit) -> float:
 	var mult := 1.0
 	for card: CardData in attacker.cards:
 		if card.on_guard_threshold_dmg_bonus > 0.0:
 			if StatusEffects.get_stacks(attacker, StatusEffects.Type.GUARD) >= card.on_guard_threshold_dmg_bonus_min:
 				mult *= (1.0 + card.on_guard_threshold_dmg_bonus)
+		if card.on_retaliation_dmg_bonus > 0.0 and attacker.guard_counter_bonus_pending:
+			mult *= (1.0 + card.on_retaliation_dmg_bonus)
 	return mult
 
 
-# target의 cards에서 on_hit_dmg_reduction_burning 을 집계해 피해 배율을 반환한다 (F2).
-# 반환값: float (1.0 = 감소 없음). Combat.resolve_attack(dmg_mult) 에 전달.
+# target의 cards에서 on_hit_dmg_reduction_burning(F2, attacker의 Burn 기준) 및
+# on_guard_threshold_dmg_reduction(G3, target 자신의 Guard 기준, Bedrock)을 집계해 피해 배율을
+# 반환한다. 반환값: float (1.0 = 감소 없음). Combat.resolve_attack(dmg_mult) 에 전달.
 static func get_incoming_multiplier(attacker: Unit, target: Unit) -> float:
 	var mult := 1.0
 	for card: CardData in target.cards:
 		if card.on_hit_dmg_reduction_burning > 0.0:
 			if StatusEffects.get_stacks(attacker, StatusEffects.Type.BURN) > 0:
 				mult *= (1.0 - card.on_hit_dmg_reduction_burning)
+		if card.on_guard_threshold_dmg_reduction > 0.0:
+			if StatusEffects.get_stacks(target, StatusEffects.Type.GUARD) >= card.on_guard_threshold_dmg_reduction_min:
+				mult *= (1.0 - card.on_guard_threshold_dmg_reduction)
 	return mult
 
 
@@ -158,6 +169,10 @@ static func apply_on_attack_aoe(
 # counter_mult: target.cards의 counter_damage_multiplier 곱셈 합산 (Thorn Armor). 없으면 1.0.
 # 적 유닛은 cards == [] 이므로 counter_mult는 항상 1.0 (하지만 적도 Guard 스택은 가질 수 있음).
 # 사망 판정은 호출자(grid_manager._sweep_deaths)의 책임.
+#
+# G3 신규: 반격이 실제로 발동했으면(counter > 0), target의 카드 중 on_retaliation_dmg_bonus > 0.0
+# 인 게 있으면 target.guard_counter_bonus_pending = true (Retaliatory Strike). 소비(false로 리셋)는
+# grid_manager._resolve_full_attack()이 get_outgoing_multiplier() 호출 직후 담당.
 static func apply_guard_counter(attacker: Unit, target: Unit) -> void:
 	var stacks: int = StatusEffects.get_stacks(target, StatusEffects.Type.GUARD)
 	if stacks <= 0:
@@ -169,6 +184,10 @@ static func apply_guard_counter(attacker: Unit, target: Unit) -> void:
 	var counter: int = roundi(stacks * GUARD_COUNTER_PER_STACK * mult)
 	if counter > 0:
 		attacker.take_str_damage(counter)
+		for card: CardData in target.cards:
+			if card.on_retaliation_dmg_bonus > 0.0:
+				target.guard_counter_bonus_pending = true
+				break
 
 
 # Ember Trace: 불붙은 상태로 사망한 적의 Burn 스택 절반(올림)을 인접 적에 전이한다 (F3 신규).

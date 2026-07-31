@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://earth_bedrock001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "bedrock"
+title = "반석"
+description = "자신 Guard 4 이상일 때: 받는 피해 -20%."
+element = 3
+tier = 1
+on_guard_threshold_dmg_reduction = 0.2
+on_guard_threshold_dmg_reduction_min = 4

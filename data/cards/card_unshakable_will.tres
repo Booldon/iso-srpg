@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://earth_unshak0001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "unshakable_will"
+title = "부동의 의지"
+description = "전투당 1회, 자신 Strength가 30% 이하가 되면: Guard 즉시 만충."
+element = 3
+tier = 1
+on_low_str_fill_guard = true
+on_low_str_threshold = 0.3

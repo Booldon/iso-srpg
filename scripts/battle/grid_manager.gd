@@ -87,6 +87,8 @@ func _on_turn_started(unit: Unit) -> void:
 	var burn_dmg := StatusEffects.tick_turn_start(unit)
 	# F4: refresh Brittle Coat AMR debuff after tick (Burn stacks may have changed)
 	_refresh_burn_armor_debuffs()
+	_refresh_guard_ally_bonuses()  # G3 신규: Earthen Empathy
+	_check_low_str_triggers()      # G3 신규: Unshakable Will
 	if burn_dmg > 0 and not unit.is_alive():
 		# Burn 틱으로 사망 → _sweep_deaths()로 Ember Trace 훅 통합 처리
 		_sweep_deaths()
@@ -180,16 +182,21 @@ func _run_enemy_turn(unit: Unit) -> void:
 
 
 func _resolve_full_attack(attacker: Unit, target: Unit, hit_armor: bool) -> void:
-	# F2 incoming(target측 피해 감소) × G2 outgoing(attacker측 피해 증폭, Center of Gravity)
+	_apply_earthen_bond(attacker, target)  # G3 신규: 공격 판정 전에 target.temp_armor_bonus 선점
+	# F2/G3 incoming(target측 피해 감소, Bedrock 포함) × G2/G3 outgoing(attacker측 피해 증폭, Retaliatory Strike 포함)
 	var dmg_mult := CardEffects.get_incoming_multiplier(attacker, target) * CardEffects.get_outgoing_multiplier(attacker)
+	attacker.guard_counter_bonus_pending = false  # G3 신규: Retaliatory Strike 보너스는 읽는 즉시 소비
 	Combat.resolve_attack(attacker, target, hit_armor, dmg_mult)
+	target.temp_armor_bonus = 0  # G3 신규: Earthen Bond는 이번 피격 한정 — 판정 직후 리셋
 	CardEffects.apply_on_attack(attacker, target)
 	CardEffects.apply_on_hit(attacker, target)
-	CardEffects.apply_guard_counter(attacker, target)  # G1 신규: Guard 반격
+	CardEffects.apply_guard_counter(attacker, target)  # G1 신규: Guard 반격 (G3: 성공 시 guard_counter_bonus_pending 세팅)
 	_apply_ashen_ward(attacker, target)
 	CardEffects.apply_on_attack_aoe(attacker, _splash_targets(target), _living_enemies())
 	# F4: refresh Brittle Coat AMR debuff after all burn changes this attack
 	_refresh_burn_armor_debuffs()
+	_refresh_guard_ally_bonuses()  # G3 신규: Earthen Empathy
+	_check_low_str_triggers()      # G3 신규: Unshakable Will
 
 
 # Ashen Ward: target(피격된 아군)에 인접한 다른 플레이어 유닛이 보유한
@@ -210,6 +217,32 @@ func _apply_ashen_ward(attacker: Unit, target: Unit) -> void:
 		var unit_cell := Vector2i(unit.grid_col, unit.grid_row)
 		if absi(unit_cell.x - target_cell.x) + absi(unit_cell.y - target_cell.y) == 1:
 			StatusEffects.add(attacker, StatusEffects.Type.BURN, burn_amt)
+
+
+# Earthen Bond (G3 신규): target(곧 피격될 아군)에 인접한 다른 플레이어 유닛이
+# on_adjacent_ally_hit_guard_cost/_armor_bonus 카드를 보유하고, 자신 Guard가 cost 이상이면
+# Guard를 cost만큼 소비하고 target.temp_armor_bonus에 bonus를 더한다 (이번 피격 한정).
+# 여러 보유자가 인접하면 각각 독립적으로 소비·누적된다 (Ashen Ward의 burn_amt 누적과 동일 컨벤션).
+# _apply_ashen_ward()와 달리 공격 판정 **이전**에 호출해야 한다 (Combat.resolve_attack()이
+# target.effective_armor()를 읽기 전에 temp_armor_bonus가 반영되어야 하므로).
+# target이 플레이어일 때만 발동 (적이 맞을 때는 no-op).
+func _apply_earthen_bond(attacker: Unit, target: Unit) -> void:
+	if not target.is_player:
+		return
+	var target_cell := Vector2i(target.grid_col, target.grid_row)
+	for unit: Unit in _turn_manager.get_all_units():
+		if not unit.is_player or unit == target:
+			continue
+		var unit_cell := Vector2i(unit.grid_col, unit.grid_row)
+		if absi(unit_cell.x - target_cell.x) + absi(unit_cell.y - target_cell.y) != 1:
+			continue
+		for card: CardData in unit.cards:
+			if card.on_adjacent_ally_hit_guard_cost <= 0 or card.on_adjacent_ally_hit_armor_bonus <= 0:
+				continue
+			if StatusEffects.get_stacks(unit, StatusEffects.Type.GUARD) < card.on_adjacent_ally_hit_guard_cost:
+				continue
+			StatusEffects.consume(unit, StatusEffects.Type.GUARD, card.on_adjacent_ally_hit_guard_cost)
+			target.temp_armor_bonus += card.on_adjacent_ally_hit_armor_bonus
 
 
 # 살아있는 플레이어 유닛 목록을 반환한다.
@@ -541,6 +574,7 @@ func _place_players() -> void:
 			unit.stats.move_range = maxi(1, unit.stats.move_range + card.battle_start_move_bonus)
 			if card.battle_start_guard > 0:
 				StatusEffects.add(unit, StatusEffects.Type.GUARD, card.battle_start_guard)
+		unit.battle_max_strength = unit.effective_strength()  # G3: Unshakable Will 비율 기준 스냅샷
 		unit.roster_path = rec["path"]
 		unit.grid_col = cell.x
 		unit.grid_row = cell.y
@@ -572,6 +606,7 @@ func _place_enemies() -> void:
 		unit.is_player = false
 		unit.stats = stats_res.duplicate()
 		unit.temp_strength = 0  # enemies never hold temp STR
+		unit.battle_max_strength = unit.effective_strength()  # G3: Unshakable Will 비율 기준 스냅샷
 		# No boon system — enemy debuffs are card effects applied during combat.
 		unit.grid_col = cell.x
 		unit.grid_row = cell.y
@@ -610,3 +645,43 @@ func _refresh_burn_armor_debuffs() -> void:
 					if StatusEffects.get_stacks(enemy, StatusEffects.Type.BURN) >= card.on_burn_threshold_armor_min:
 						total_debuff += card.on_burn_threshold_armor_debuff
 		enemy.burn_armor_debuff = total_debuff
+
+
+# G3 신규: 매 플레이어 유닛에 대해, 인접한 다른 플레이어가 Earthen Empathy 카드를 보유하고
+# 그 보유자의 Guard가 임계 이상이면 AMR 보너스를 합산해 guard_ally_armor_bonus를 갱신한다.
+# _refresh_burn_armor_debuffs()와 동일 패턴 — 조건(Guard 임계, 인접 여부)이 바뀔 수 있으므로
+# 매 공격 직후·턴 시작 tick 직후 다시 계산한다 (지속형 버프라 스냅샷을 저장하지 않음).
+func _refresh_guard_ally_bonuses() -> void:
+	var players := _living_players()
+	for p: Unit in players:
+		var p_cell := Vector2i(p.grid_col, p.grid_row)
+		var total_bonus: int = 0
+		for other: Unit in players:
+			if other == p:
+				continue
+			var other_cell := Vector2i(other.grid_col, other.grid_row)
+			if absi(other_cell.x - p_cell.x) + absi(other_cell.y - p_cell.y) != 1:
+				continue
+			for card: CardData in other.cards:
+				if card.on_guard_threshold_ally_armor_bonus > 0:
+					if StatusEffects.get_stacks(other, StatusEffects.Type.GUARD) >= card.on_guard_threshold_ally_armor_bonus_min:
+						total_bonus += card.on_guard_threshold_ally_armor_bonus
+		p.guard_ally_armor_bonus = total_bonus
+
+
+# G3 신규 (Unshakable Will): 아직 발동하지 않은 유닛 중, on_low_str_fill_guard 카드를 보유하고
+# effective_strength() / battle_max_strength 비율이 카드의 on_low_str_threshold 이하로 떨어진
+# 유닛의 Guard를 즉시 만충시키고 unshakable_will_used를 세워 전투당 1회로 제한한다.
+# StatusEffects.add()가 결과를 MAX_STACK으로 클램프하므로 델타 계산 없이 큰 값을 더하면 된다.
+func _check_low_str_triggers() -> void:
+	for u: Unit in _turn_manager.get_all_units():
+		if u.unshakable_will_used or not u.is_alive() or u.battle_max_strength <= 0:
+			continue
+		for card: CardData in u.cards:
+			if not card.on_low_str_fill_guard:
+				continue
+			var ratio := float(u.effective_strength()) / float(u.battle_max_strength)
+			if ratio <= card.on_low_str_threshold:
+				StatusEffects.add(u, StatusEffects.Type.GUARD, StatusEffects.MAX_STACK)
+				u.unshakable_will_used = true
+				break

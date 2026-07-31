@@ -1,4 +1,4 @@
-## 헤드리스 스모크 테스트 — Earth G1+G2 (Guard 기반/소비 슬라이스) 로직 검증
+## 헤드리스 스모크 테스트 — Earth G1+G2+G3 (Guard 기반/소비/반응 슬라이스) 로직 검증
 ## 실행: Godot 에디터 > 이 파일 열기 > 우상단 "실행" 아이콘
 ## 또는 헤드리스: godot --headless --script res://scripts/battle/guard_smoke_test.gd
 ## 테스트 프레임워크(GUT) 없이 print+assert 방식. 실패 시 FAIL 출력.
@@ -33,7 +33,7 @@ func _make_unit(base_str: int, base_armor: int = 0) -> Unit:
 
 
 func _init() -> void:
-	print("\n=== Earth G1+G2 (Guard) Smoke Test ===\n")
+	print("\n=== Earth G1+G2+G3 (Guard) Smoke Test ===\n")
 
 	# ─ 블록 A: Guard 스택 → effective_armor ───────────────────────────────────
 	print("-- A: Guard stacks raise effective_armor --")
@@ -191,6 +191,56 @@ func _init() -> void:
 	cog_attacker2.cards = [cog2a, cog2b]
 	StatusEffects.add(cog_attacker2, StatusEffects.Type.GUARD, 4)
 	_check("two Center of Gravity cards stack multiplicatively: 1.2 x 1.2 = 1.44", is_equal_approx(CardEffects.get_outgoing_multiplier(cog_attacker2), 1.44))
+
+	# ─ 블록 L: Bedrock — get_incoming_multiplier() (target 자신의 Guard 기준) ─
+	print("\n-- L: Bedrock (on_guard_threshold_dmg_reduction) --")
+	var bed_attacker := _make_unit(10, 0)
+	var bed_target := _make_unit(10, 0)
+	var bedrock := CardData.new()
+	bedrock.on_guard_threshold_dmg_reduction = 0.2
+	bedrock.on_guard_threshold_dmg_reduction_min = 4
+	bed_target.cards = [bedrock]
+	StatusEffects.add(bed_target, StatusEffects.Type.GUARD, 3)
+	_check("target Guard(3) < min(4): incoming multiplier == 1.0", is_equal_approx(CardEffects.get_incoming_multiplier(bed_attacker, bed_target), 1.0))
+	StatusEffects.add(bed_target, StatusEffects.Type.GUARD, 1)
+	_check("target Guard(4) >= min(4): incoming multiplier == 0.8", is_equal_approx(CardEffects.get_incoming_multiplier(bed_attacker, bed_target), 0.8))
+
+	# F2(Ember Barrier류)와 G3(Bedrock)이 함께 있으면 곱셈 합산되는지 확인
+	var bed_attacker2 := _make_unit(10, 0)
+	StatusEffects.add(bed_attacker2, StatusEffects.Type.BURN, 1)
+	var bed_target2 := _make_unit(10, 0)
+	var ember_barrier := CardData.new()
+	ember_barrier.on_hit_dmg_reduction_burning = 0.3
+	var bedrock2 := CardData.new()
+	bedrock2.on_guard_threshold_dmg_reduction = 0.2
+	bedrock2.on_guard_threshold_dmg_reduction_min = 4
+	bed_target2.cards = [ember_barrier, bedrock2]
+	StatusEffects.add(bed_target2, StatusEffects.Type.GUARD, 4)
+	_check("Ember Barrier(0.7) x Bedrock(0.8) = 0.56 combined", is_equal_approx(CardEffects.get_incoming_multiplier(bed_attacker2, bed_target2), 0.56))
+
+	# ─ 블록 M: Retaliatory Strike — 반격 성공 → 다음 공격 outgoing multiplier ─
+	print("\n-- M: Retaliatory Strike (guard_counter_bonus_pending) --")
+	var rs_attacker := _make_unit(10, 0)
+	var rs_defender := _make_unit(10, 0)
+	var retaliatory := CardData.new()
+	retaliatory.on_retaliation_dmg_bonus = 0.5
+	rs_defender.cards = [retaliatory]
+	StatusEffects.add(rs_defender, StatusEffects.Type.GUARD, 3)
+	_check("before counter: guard_counter_bonus_pending == false", not rs_defender.guard_counter_bonus_pending)
+	CardEffects.apply_guard_counter(rs_attacker, rs_defender)
+	_check("counter landed (attacker STR 10-3=7)", rs_attacker.stats.strength == 7)
+	_check("after successful counter: guard_counter_bonus_pending == true", rs_defender.guard_counter_bonus_pending)
+	_check("defender's next-attack outgoing multiplier == 1.5", is_equal_approx(CardEffects.get_outgoing_multiplier(rs_defender), 1.5))
+	_check("get_outgoing_multiplier() is pure (does not reset the flag): still true", rs_defender.guard_counter_bonus_pending)
+	_check("calling get_outgoing_multiplier() again still returns 1.5", is_equal_approx(CardEffects.get_outgoing_multiplier(rs_defender), 1.5))
+
+	# Guard 없어서 반격 자체가 안 나면 플래그도 안 세워짐
+	var rs_attacker2 := _make_unit(10, 0)
+	var rs_defender2 := _make_unit(10, 0)
+	rs_defender2.cards = [retaliatory]
+	CardEffects.apply_guard_counter(rs_attacker2, rs_defender2)
+	_check("no Guard, no counter: guard_counter_bonus_pending stays false", not rs_defender2.guard_counter_bonus_pending)
+	_check("no pending: outgoing multiplier == 1.0", is_equal_approx(CardEffects.get_outgoing_multiplier(rs_defender2), 1.0))
 
 	# ─ 최종 결과 ─────────────────────────────────────────────────────────────
 	print("\n=== Result: %d PASS / %d FAIL ===" % [_pass, _fail])

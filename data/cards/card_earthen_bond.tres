@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://earth_bond000001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "earthen_bond"
+title = "대지의 유대"
+description = "인접 아군이 피격될 때: 자신 Guard 1 소비 → 그 아군 AMR+2 (이번 피격 한정)."
+element = 3
+tier = 1
+on_adjacent_ally_hit_guard_cost = 1
+on_adjacent_ally_hit_armor_bonus = 2

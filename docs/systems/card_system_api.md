@@ -1,6 +1,6 @@
 # Card / Status-Effect System — API Contract
 
-**Version:** 1.6 (G2 — Guard consume payoff: Crush, Cataclysm, Awakening of Earth, Fracture, Center of Gravity)
+**Version:** 1.7 (G3 — reactive/threshold defense + ally support: Bedrock, Unshakable Will, Earthen Bond, Earthen Empathy, Retaliatory Strike)
 **Date:** 2026-07-31  
 **Owner:** systems-designer  
 **Status:** Confirmed — implementation may begin
@@ -197,6 +197,36 @@ enum Tier { COMMON, RARE, EPIC }
 # 비율. 0.2 = +20%. 0.0이면 no-op.
 @export var on_guard_threshold_dmg_bonus: float = 0.0
 @export var on_guard_threshold_dmg_bonus_min: int = 4
+
+# --- Guard 임계 피해 감소 (G3 슬라이스 — 구현됨, Bedrock) ---
+# target 자신의 Guard가 이 값 이상이면 받는 피해에 곱할 감소 비율. 0.2 = -20%. 0.0이면 no-op.
+# on_hit_dmg_reduction_burning(F2, attacker의 Burn 기준)과 달리 target 자신의 Guard가 조건.
+@export var on_guard_threshold_dmg_reduction: float = 0.0
+@export var on_guard_threshold_dmg_reduction_min: int = 4
+
+# --- 저HP 1회성 Guard 만충 (G3 슬라이스 — 구현됨, Unshakable Will) ---
+# true면 이 유닛의 effective_strength() / battle_max_strength 비율이 on_low_str_threshold
+# 이하로 떨어졌을 때(전투당 1회) Guard를 즉시 만충시킨다. 0.0/false면 no-op.
+@export var on_low_str_fill_guard: bool = false
+@export var on_low_str_threshold: float = 0.3
+
+# --- 인접 아군 피격 시 1회성 AMR 부여, 자신 Guard 소비 (G3 슬라이스 — 구현됨, Earthen Bond) ---
+# 인접한 아군이 피격될 때, 자신의 Guard를 on_adjacent_ally_hit_guard_cost만큼 소비해
+# 그 아군에게 이번 피격 한정 AMR 보너스(on_adjacent_ally_hit_armor_bonus)를 부여한다.
+# 자신 Guard가 cost 미만이면 발동하지 않는다. 0이면 no-op.
+@export var on_adjacent_ally_hit_guard_cost: int = 0
+@export var on_adjacent_ally_hit_armor_bonus: int = 0
+
+# --- Guard 임계 인접 아군 지속 AMR 보너스 (G3 슬라이스 — 구현됨, Earthen Empathy) ---
+# 자신의 Guard가 on_guard_threshold_ally_armor_bonus_min 이상인 동안, 인접한 아군 전원이
+# 이 값만큼 AMR 보너스를 지속적으로 받는다 (조건이 깨지면 즉시 사라짐). 0이면 no-op.
+@export var on_guard_threshold_ally_armor_bonus: int = 0
+@export var on_guard_threshold_ally_armor_bonus_min: int = 3
+
+# --- 반격 성공 후 다음 공격 데미지 보너스 (G3 슬라이스 — 구현됨, Retaliatory Strike) ---
+# 이 유닛의 Guard 반격이 발동했을 때 세팅되는 unit.guard_counter_bonus_pending이 true이면,
+# 다음 자신의 공격 데미지에 이 값만큼 보너스를 곱한다. 0.5 = +50%. 0.0이면 no-op.
+@export var on_retaliation_dmg_bonus: float = 0.0
 ```
 
 ### CardData 불변 규칙
@@ -254,6 +284,25 @@ var _burn_decay_skip: bool = false
 # Burn 임계 미달 시 0으로 복귀. 외부에서 직접 세팅 금지 — grid_manager만 갱신.
 var burn_armor_debuff: int = 0
 
+# ── 런타임 필드 (신규 — G3 슬라이스) ────────────────────────────────────────
+# Unshakable Will 비율 기준: 배치 직후(battle-start 카드 효과 적용 후) effective_strength()
+# 스냅샷. grid_manager._place_players()/_place_enemies()가 설정. .tres 저장 안 함.
+var battle_max_strength: int = 0
+
+# Unshakable Will: 전투당 1회 가드. grid_manager._check_low_str_triggers()가 발동 시 true로 설정.
+var unshakable_will_used: bool = false
+
+# Earthen Bond: 이번 피격 한정 AMR 보너스. grid_manager._apply_earthen_bond()가 공격 판정 직전
+# 설정하고, Combat.resolve_attack() 직후 grid_manager가 0으로 리셋.
+var temp_armor_bonus: int = 0
+
+# Earthen Empathy: grid_manager._refresh_guard_ally_bonuses()가 매번 재계산하는 지속 AMR 보너스.
+var guard_ally_armor_bonus: int = 0
+
+# Retaliatory Strike: 이 유닛의 Guard 반격이 성공하면 CardEffects.apply_guard_counter()가 true로
+# 설정. 다음 공격에서 CardEffects.get_outgoing_multiplier()가 읽고, grid_manager가 그 직후 false로 리셋.
+var guard_counter_bonus_pending: bool = false
+
 
 # ── 메서드 (신규 — F1 슬라이스) ─────────────────────────────────────────────
 # 현재 유효 Strength = stats.strength + temp_strength.
@@ -273,9 +322,11 @@ func is_alive() -> bool
 # 적용 대상: STR hit 공격, Burn 틱 데미지, detonation burst — 모두 이 함수 경유.
 func take_str_damage(amount: int) -> void
 
-# ── 메서드 (F4 슬라이스, G1에서 Guard 반영으로 갱신) ─────────────────────────
-# 현재 유효 Armor = max(0, stats.armor + guard_stacks - burn_armor_debuff).
+# ── 메서드 (F4 슬라이스, G1/G3에서 Guard 반영으로 갱신) ──────────────────────
+# 현재 유효 Armor = max(0, stats.armor + guard_stacks + temp_armor_bonus + guard_ally_armor_bonus
+#   - burn_armor_debuff).
 # guard_stacks = StatusEffects.get_stacks(self, GUARD). Guard 스택 1당 AMR +1 (G1).
+# temp_armor_bonus(Earthen Bond, 1회성) + guard_ally_armor_bonus(Earthen Empathy, 지속) 가산 (G3).
 # Combat.resolve_attack()의 strength-hit 경로가 stats.armor 대신 이 값을 사용.
 # armor-hit(방어 차감 공격)는 base stats.armor를 직접 차감 (이 함수와 무관).
 # 읽기 전용 계산 — unit의 상태를 수정하지 않음.
@@ -289,6 +340,9 @@ func effective_armor() -> int
 - `cards` 배열은 배틀 외부에서 접근 금지.
 - `take_str_damage()`를 우회하여 `stats.strength`나 `temp_strength`를 외부에서 직접 감산 금지.
 - F4 신규 필드(`burn_max`, `burn_tick_mult_next`, `burn_decay_slowed`, `_burn_decay_skip`, `burn_armor_debuff`)는 배치 시 초기화, .tres 저장 안 함. `burn_armor_debuff`는 grid_manager만 갱신.
+- G3 신규 필드(`battle_max_strength`, `unshakable_will_used`, `temp_armor_bonus`, `guard_ally_armor_bonus`,
+  `guard_counter_bonus_pending`)도 배치 시 초기화, .tres 저장 안 함. `temp_armor_bonus`/`guard_ally_armor_bonus`는
+  grid_manager만 갱신(직접 세팅 금지), `guard_counter_bonus_pending`은 CardEffects가 세팅·grid_manager가 리셋.
 
 ---
 
@@ -444,46 +498,57 @@ class_name CardEffects
 #   [5] Guard 소비 버스트 → [6] Fracture. 순서 역전 금지 (Fracture가 [5]보다 먼저 오면 소비 전
 #   스택을 읽게 되어 결과가 달라짐).
 #
-# 호출 위치 (grid_manager._resolve_full_attack → _sweep_deaths):
-#   var dmg_mult := CardEffects.get_incoming_multiplier(attacker, target) * CardEffects.get_outgoing_multiplier(attacker)  ← G2 갱신
+# 호출 위치 (grid_manager._resolve_full_attack → _sweep_deaths, G3 갱신):
+#   grid_manager._apply_earthen_bond(attacker, target)  ← G3 신규, 공격 판정 이전
+#   var dmg_mult := CardEffects.get_incoming_multiplier(attacker, target) * CardEffects.get_outgoing_multiplier(attacker)
+#   attacker.guard_counter_bonus_pending = false  ← G3 신규, outgoing에서 읽은 직후 소비
 #   Combat.resolve_attack(attacker, target, hit_armor, dmg_mult)
+#   target.temp_armor_bonus = 0  ← G3 신규, Earthen Bond 1회성 리셋
 #   CardEffects.apply_on_attack(attacker, target)
 #   CardEffects.apply_on_hit(attacker, target)
-#   CardEffects.apply_guard_counter(attacker, target)  ← G1 신규
+#   CardEffects.apply_guard_counter(attacker, target)  ← G1 신규 (G3: 성공 시 guard_counter_bonus_pending 세팅)
 #   grid_manager._apply_ashen_ward(attacker, target)
 #   CardEffects.apply_on_attack_aoe(attacker, _splash_targets(target), _living_enemies())
 #   grid_manager._refresh_burn_armor_debuffs()  ← F4 신규
+#   grid_manager._refresh_guard_ally_bonuses()  ← G3 신규
+#   grid_manager._check_low_str_triggers()  ← G3 신규
 #   grid_manager._sweep_deaths()
 static func apply_on_attack(attacker: Unit, target: Unit) -> void
 
 
-# attacker의 cards에서 on_guard_threshold_dmg_bonus 를 집계해 공격 배율을 반환한다 (G2 신규,
-# Center of Gravity). get_incoming_multiplier()(F2, target측 피해 감소)와 반대 방향 — 이건
-# attacker측 피해 증폭.
+# attacker의 cards에서 on_guard_threshold_dmg_bonus(G2, Center of Gravity) 및
+# on_retaliation_dmg_bonus(G3 신규, Retaliatory Strike)를 집계해 공격 배율을 반환한다.
+# get_incoming_multiplier()(F2/G3, target측 피해 감소)와 반대 방향 — 이건 attacker측 피해 증폭.
 #
 # 계산:
 #   mult = 1.0
-#   attacker.cards 순회: on_guard_threshold_dmg_bonus > 0.0인 카드마다,
-#     if get_stacks(attacker, GUARD) >= card.on_guard_threshold_dmg_bonus_min: mult *= (1.0 + card.on_guard_threshold_dmg_bonus)
+#   attacker.cards 순회:
+#     on_guard_threshold_dmg_bonus > 0.0 이고 get_stacks(attacker, GUARD) >= _min: mult *= (1.0 + bonus)
+#     on_retaliation_dmg_bonus > 0.0 이고 attacker.guard_counter_bonus_pending == true: mult *= (1.0 + bonus)  ← G3 신규
 #   return mult
 #
-# 반환값: float (1.0 = 보너스 없음, 1.2 = +20%). 여러 장 보유 시 곱셈 합산.
+# ★ 순수 함수 유지: guard_counter_bonus_pending을 읽기만 하며 리셋하지 않는다. 리셋(소비)은
+# 호출자(grid_manager._resolve_full_attack)가 이 함수 호출 직후 담당한다.
+#
+# 반환값: float (1.0 = 보너스 없음, 1.2 = +20%, 1.5 = +50%). 여러 장 보유 시 곱셈 합산.
 # 적 유닛 카드 없음(cards==[]) → 항상 1.0 반환.
 # 호출 위치: grid_manager._resolve_full_attack() 내부, get_incoming_multiplier()와 곱해 dmg_mult로 사용.
 static func get_outgoing_multiplier(attacker: Unit) -> float
 
 
-# target의 cards에서 on_hit_dmg_reduction_burning > 0.0인 것을 집계해
-# Combat.resolve_attack()에 전달할 피해 배율을 반환한다 (F2 신규).
+# target의 cards에서 on_hit_dmg_reduction_burning(F2, attacker의 Burn 기준) 및
+# on_guard_threshold_dmg_reduction(G3 신규, target 자신의 Guard 기준, Bedrock)을 집계해
+# Combat.resolve_attack()에 전달할 피해 배율을 반환한다.
 #
 # 계산:
 #   mult = 1.0
-#   target.cards 순회: on_hit_dmg_reduction_burning > 0.0인 카드마다,
-#     if StatusEffects.get_stacks(attacker, BURN) > 0: mult *= (1.0 - card.on_hit_dmg_reduction_burning)
+#   target.cards 순회:
+#     on_hit_dmg_reduction_burning > 0.0 이고 get_stacks(attacker, BURN) > 0: mult *= (1.0 - reduction)
+#     on_guard_threshold_dmg_reduction > 0.0 이고 get_stacks(target, GUARD) >= _min: mult *= (1.0 - reduction)  ← G3 신규
 #   return mult
 #
-# 반환값: float (1.0 = 감소 없음, 0.7 = 30% 감소).
-# 여러 Ember Barrier 중첩 시 곱셈 합산 (1.0 × 0.7 × 0.7 = 0.49).
+# 반환값: float (1.0 = 감소 없음, 0.7 = 30% 감소, 0.8 = 20% 감소).
+# 여러 카드 중첩 시 곱셈 합산 (1.0 × 0.7 × 0.8 = 0.56).
 # 적 유닛 카드 없음(cards==[]) → 항상 1.0 반환.
 # 호출 위치: grid_manager._resolve_full_attack() 내부, Combat.resolve_attack() 직전.
 static func get_incoming_multiplier(attacker: Unit, target: Unit) -> float
@@ -534,6 +599,10 @@ static func apply_on_attack_aoe(attacker: Unit, splash_targets: Array[Unit], all
 #
 # 상수: GUARD_COUNTER_PER_STACK = 1 (고정값 — decisions_log "스택 기반 데미지는 고정값" 규약,
 # 2026-07-12 Earth 카운터뎀 stacks×2→stacks×1 너프 반영값).
+#
+# G3 신규: counter > 0(반격이 실제로 발동)이면, target.cards 중 on_retaliation_dmg_bonus > 0.0인
+# 카드가 있으면 target.guard_counter_bonus_pending = true (Retaliatory Strike). 소비(false로 리셋)는
+# get_outgoing_multiplier() 호출 직후 grid_manager가 담당 — 이 함수는 세팅만 한다.
 #
 # 사망 판정은 호출자(grid_manager._sweep_deaths)의 책임. 적 유닛도 Guard 스택을 가질 수 있으므로
 # attacker가 플레이어여도 반격 대상이 될 수 있음 (대칭적 innate 효과).
@@ -600,6 +669,40 @@ func _refresh_burn_armor_debuffs() -> void
 
 ---
 
+## grid_manager G3 신규 함수 (combat-programmer 소유)
+
+```gdscript
+# Earthen Bond: target(곧 피격될 아군)에 인접한 다른 플레이어 유닛이
+# on_adjacent_ally_hit_guard_cost/_armor_bonus 카드를 보유하고 자신 Guard가 cost 이상이면,
+# Guard를 cost만큼 소비하고 target.temp_armor_bonus에 bonus를 더한다.
+# 여러 보유자가 인접하면 각각 독립적으로 소비·누적 (Ashen Ward의 burn_amt 누적과 동일 컨벤션).
+# target이 플레이어가 아니면 no-op (적이 맞을 때는 발동 안 함, Ashen Ward와 동일 가드).
+# ★ _apply_ashen_ward()와 달리 공격 판정 **이전**에 호출해야 한다 — Combat.resolve_attack()이
+# target.effective_armor()를 읽기 전에 temp_armor_bonus가 반영되어야 하므로.
+# 호출 위치: _resolve_full_attack() 맨 앞 (dmg_mult 계산보다 먼저).
+func _apply_earthen_bond(attacker: Unit, target: Unit) -> void
+
+# Earthen Empathy: 각 플레이어 유닛에 대해, 인접한 다른 플레이어가 on_guard_threshold_ally_armor_bonus
+# 카드를 보유하고 자신 Guard가 _min 이상이면 그 값을 합산해 guard_ally_armor_bonus를 갱신한다.
+# _refresh_burn_armor_debuffs()와 동일 구조 — 지속형 조건이라 스냅샷 없이 매번 재계산.
+# 호출 위치: _resolve_full_attack() 끝, _on_turn_started() 틱 처리 후 (F4 refresh들과 나란히).
+func _refresh_guard_ally_bonuses() -> void
+
+# Unshakable Will: 아직 발동하지 않은(unshakable_will_used == false) 유닛 중, on_low_str_fill_guard
+# 카드를 보유하고 effective_strength() / battle_max_strength 비율이 on_low_str_threshold 이하인
+# 유닛의 Guard를 StatusEffects.add(u, GUARD, MAX_STACK)으로 즉시 만충시키고(클램프되므로 델타 계산
+# 불필요) unshakable_will_used = true로 세팅한다 (전투당 1회).
+# battle_max_strength <= 0(설정 안 됨) 또는 사망 유닛은 스킵.
+# 호출 위치: _resolve_full_attack() 끝, _on_turn_started() 틱 처리 후.
+func _check_low_str_triggers() -> void
+```
+
+**battle_max_strength 설정 규칙:** `_place_players()`/`_place_enemies()`가 battle-start 카드 효과
+(temp_strength, battle_start_*_bonus) 적용을 모두 마친 직후 `unit.battle_max_strength = unit.effective_strength()`로
+스냅샷을 찍는다 — Solar 등으로 임시 강화된 상태를 기준으로 삼는다.
+
+---
+
 ## 파일 소유권 매트릭스
 
 한 파일은 정확히 한 에이전트만 소유한다.
@@ -610,12 +713,12 @@ func _refresh_burn_armor_debuffs() -> void
 | `scripts/data/card_data.gd` | combat-programmer | F4: `on_attack_burn_tick_multiplier`, `on_attack_burn_decay_slow`, `on_attack_burn_max_override`, `on_burn_threshold_armor_debuff`, `on_burn_threshold_armor_min` 추가 |
 | `data/cards/*.tres` | data-balancer | F4: `card_white_heat`, `card_smolder`, `card_high_density`, `card_brittle_coat` 추가 |
 | `scripts/battle/status_effects.gd` | combat-programmer | F4: `add()` BURN 상한 `unit.burn_max` 사용, `tick_turn_start()` 배수·감쇠 지연 갱신 |
-| `scripts/battle/card_effects.gd` | combat-programmer | F4: `apply_on_attack()` [3] 틱 수정자 블록 추가, detonation consume-all 버그 수정, aoe fill_max `unit.burn_max` 기준 갱신. G2: `apply_on_attack()` [5][6] 블록 추가, 신규 `get_outgoing_multiplier()` |
-| `scripts/battle/unit.gd` | combat-programmer | F4: `burn_max`, `burn_tick_mult_next`, `burn_decay_slowed`, `_burn_decay_skip`, `burn_armor_debuff` 필드, `effective_armor()` 추가 |
+| `scripts/battle/card_effects.gd` | combat-programmer | F4: `apply_on_attack()` [3] 틱 수정자 블록 추가, detonation consume-all 버그 수정, aoe fill_max `unit.burn_max` 기준 갱신. G2: `apply_on_attack()` [5][6] 블록 추가, 신규 `get_outgoing_multiplier()`. G3: `get_incoming_multiplier()`/`get_outgoing_multiplier()`에 Bedrock/Retaliatory Strike 분기 추가, `apply_guard_counter()`가 `guard_counter_bonus_pending` 세팅 |
+| `scripts/battle/unit.gd` | combat-programmer | F4: `burn_max`, `burn_tick_mult_next`, `burn_decay_slowed`, `_burn_decay_skip`, `burn_armor_debuff` 필드, `effective_armor()` 추가. G3: `battle_max_strength`, `unshakable_will_used`, `temp_armor_bonus`, `guard_ally_armor_bonus`, `guard_counter_bonus_pending` 필드 추가, `effective_armor()` 공식에 반영 |
 | `scripts/battle/combat.gd` | combat-programmer | F4: strength-hit 경로가 `target.effective_armor()` 사용으로 갱신 |
-| `scripts/battle/grid_manager.gd` | combat-programmer | F4: `_setup_burn_caps()`, `_refresh_burn_armor_debuffs()` 추가; `_resolve_full_attack()` 끝·턴 시작 후 디버프 갱신 호출 추가. G1: `_place_players()` battle-start 루프에 `battle_start_guard` 적용, `_resolve_full_attack()`에 `apply_guard_counter()` 호출 추가. G2: `_resolve_full_attack()`의 `dmg_mult`가 `get_outgoing_multiplier()`와 곱해지도록 갱신 |
+| `scripts/battle/grid_manager.gd` | combat-programmer | F4: `_setup_burn_caps()`, `_refresh_burn_armor_debuffs()` 추가; `_resolve_full_attack()` 끝·턴 시작 후 디버프 갱신 호출 추가. G1: `_place_players()` battle-start 루프에 `battle_start_guard` 적용, `_resolve_full_attack()`에 `apply_guard_counter()` 호출 추가. G2: `_resolve_full_attack()`의 `dmg_mult`가 `get_outgoing_multiplier()`와 곱해지도록 갱신. G3: `_place_players()`/`_place_enemies()`에 `battle_max_strength` 스냅샷, 신규 `_apply_earthen_bond()`/`_refresh_guard_ally_bonuses()`/`_check_low_str_triggers()` + `_resolve_full_attack()`/`_on_turn_started()` 호출부 갱신 |
 | `scenes/battle/*.tscn` | ui-programmer | 변경 없음 |
-| `scripts/battle/stats_panel.gd` | ui-programmer | F4: AMR 표시에 `burn_armor_debuff` 병기 (예: `ARM  3 (-2)`). G1: Guard 스택 보유 시 AMR에 `(+N)` 병기 + `GUARD N` 표시. G2: 변경 없음(영구 AMR 변화는 `stats.armor` 자체를 갱신하므로 기존 표시로 자동 반영됨) |
+| `scripts/battle/stats_panel.gd` | ui-programmer | F4: AMR 표시에 `burn_armor_debuff` 병기 (예: `ARM  3 (-2)`). G1: Guard 스택 보유 시 AMR에 `(+N)` 병기 + `GUARD N` 표시. G2/G3: 변경 없음(영구/지속 AMR 변화 모두 `effective_armor()`/`stats.armor` 경유라 기존 표시로 자동 반영됨) |
 | `docs/systems/card_system_api.md` | systems-designer | 이 문서 (계약 변경 시 먼저 여기 업데이트) |
 
 G1 신규: `card_data.gd`에 `battle_start_guard` / `on_attack_guard_self` / `counter_damage_multiplier` 추가.
@@ -630,6 +733,18 @@ G2 신규: `card_data.gd`에 `on_attack_consume_guard_self` / `on_attack_consume
 신규 `get_outgoing_multiplier()` 추가. `data/cards/*.tres`(data-balancer)에 `card_crush`,
 `card_cataclysm`(Epic, prerequisite: crush), `card_awakening_of_earth`, `card_fracture`,
 `card_center_of_gravity` 추가.
+
+G3 신규: `card_data.gd`에 `on_guard_threshold_dmg_reduction`(_min) / `on_low_str_fill_guard` /
+`on_low_str_threshold` / `on_adjacent_ally_hit_guard_cost` / `on_adjacent_ally_hit_armor_bonus` /
+`on_guard_threshold_ally_armor_bonus`(_min) / `on_retaliation_dmg_bonus` 추가.
+`unit.gd`에 런타임 필드 5개 추가(계약 B 참고), `effective_armor()`가 `temp_armor_bonus` +
+`guard_ally_armor_bonus`까지 합산하도록 갱신. `card_effects.gd`의 `get_incoming_multiplier()`/
+`get_outgoing_multiplier()`에 각각 Bedrock/Retaliatory Strike 분기 추가, `apply_guard_counter()`가
+반격 성공 시 `guard_counter_bonus_pending`을 세팅하도록 갱신. `grid_manager.gd`에 신규
+`_apply_earthen_bond()`/`_refresh_guard_ally_bonuses()`/`_check_low_str_triggers()` 추가(§"grid_manager
+G3 신규 함수" 참고). `data/cards/*.tres`(data-balancer)에 `card_bedrock`, `card_unshakable_will`,
+`card_earthen_bond`, `card_earthen_empathy`, `card_retaliatory_strike` 추가.
+**제외:** Provoke(적 AI 타겟 선택 로직 오버라이드 필요 — 별도 슬라이스로 미룸, 개발자 확인).
 
 ---
 
@@ -649,12 +764,16 @@ G2 신규: `card_data.gd`에 `on_attack_consume_guard_self` / `on_attack_consume
 | temp STR 성격 | 공격력·HP 양쪽 적용 (effective_strength()) | 단일 스탯 원칙 유지, Fire=버스트 정체성 강화 |
 | temp STR 차감 순서 | temp 버퍼 먼저, 이후 base STR | decisions_log.md "Temp STR depletion order" |
 | detonation 데미지 | 방어 무시 (armor 차감 없음) | 폭발 = 관통 페이오프 |
-| strength-hit 유효 방어 | `target.effective_armor()` = `max(0, armor + guard_stacks - burn_armor_debuff)` | Brittle Coat 지속 디버프 + Guard 스택 보너스 반영 (G1) |
+| strength-hit 유효 방어 | `target.effective_armor()` = `max(0, armor + guard_stacks + temp_armor_bonus + guard_ally_armor_bonus - burn_armor_debuff)` | Brittle Coat 지속 디버프 + Guard 스택 보너스(G1) + Earthen Bond 1회성/Earthen Empathy 지속 보너스(G3) 반영 |
 | 사망 판정 책임 | grid_manager (`tick_turn_start` / `apply_on_attack` 호출 후 `is_alive()` 체크) | StatusEffects / CardEffects는 stats만 수정 |
 | Guard 반격 데미지 | `stacks × 1 × counter_mult` 방어 무시 (고정값) | decisions_log "Earth counter-damage coefficient reduced: ×2 → ×1 (2026-07-12)" — innate 효과, 스택 소비 없음 |
 | Guard 소비 버스트 | 소비량 × `on_attack_guard_burst_per_stack` 방어 무시 (고정값) | Fire의 detonation과 동일 컨벤션 — 스탯 비례 없음 (G2) |
 | Fracture 처리 순서 | apply_on_attack의 [5](Guard 소비) 이후, [6]에서 attacker의 잔여 Guard를 읽음 | 같은 공격에 소비 카드(Crush 등)가 있으면 소비 후 값을 읽어야 결과가 모호해지지 않음 (G2) |
 | Awakening of Earth 획득 AMR | 영구(이번 전투 한정), `stats.armor`에 직접 합산 | battle_start_armor_bonus와 동일하게 base stats 수정 — temp 버퍼 아님 (G2) |
+| Earthen Bond 리셋 시점 | `Combat.resolve_attack()` 직후 즉시 `temp_armor_bonus = 0` | "이번 피격 한정" — 다음 공격까지 남아있으면 안 됨 (G3) |
+| Retaliatory Strike 소비 시점 | `get_outgoing_multiplier()` 호출 직후 `guard_counter_bonus_pending = false` | get_* 함수는 순수 함수로 유지, 리셋은 grid_manager 책임 (G3) |
+| Unshakable Will 비율 기준 | `effective_strength() / battle_max_strength`(배치 직후 스냅샷) | temp_strength 변동(Solar 등)을 반영한 "현재 실질 HP" 기준 (G3) |
+| Earthen Empathy/Bond 처리 위치 | Bond는 공격 판정 **이전**(선점형), Empathy는 매번 재계산(지속형) | Bond는 1회성 소비라 판정 전에 확정돼야 하고, Empathy는 위치가 바뀔 수 있어 스냅샷 불가 (G3) |
 
 ---
 
@@ -662,7 +781,8 @@ G2 신규: `card_data.gd`에 `on_attack_consume_guard_self` / `on_attack_consume
 
 구현 완료 슬라이스: F1(detonation+temp STR+Solar), F2(반응형 방어), F3(AoE+on-death 전이), F4(틱 수정자),
 G1(Guard 기반: 스택→AMR + innate 반격, Earthen Bulwark/Smite/Thorn Armor),
-G2(Guard 소비 페이오프: Crush/Cataclysm/Awakening of Earth/Fracture/Center of Gravity).
+G2(Guard 소비 페이오프: Crush/Cataclysm/Awakening of Earth/Fracture/Center of Gravity),
+G3(반응/임계 방어 + 아군 지원: Bedrock/Unshakable Will/Earthen Bond/Earthen Empathy/Retaliatory Strike).
 → 해당 필드는 모두 계약 A CardData 스키마 참고.
 
 **참고:** G1 계획 당시 예약해 두었던 `on_hit_guard` / `on_hit_counter_damage_multiplier` 필드명은
@@ -672,18 +792,24 @@ G2(Guard 소비 페이오프: Crush/Cataclysm/Awakening of Earth/Fracture/Center
 `on_attack_consume_guard_self`(+`_all_` 변형)로 확정됐다 (target의 Burn을 소비하는 detonation과
 방향이 반대라는 점을 필드명에서 명확히 하기 위함). Center of Gravity는 원래 G3 로드맵 후보였으나
 Guard 임계 조건부 효과라는 성격상 G2의 소비 페이오프 묶음에 함께 구현했다.
+**참고:** G3에서 **Provoke는 제외**했다 (적 AI 타겟 선택 로직(`_run_enemy_turn`/`_find_adjacent_player`)
+자체를 오버라이드해야 해서 다른 카드보다 훨씬 침습적인 변경이라 별도 슬라이스로 미룸 — 개발자 확인).
+대신 원래 로드맵에 없던 **Retaliatory Strike**(Attack 카테고리, 반응형)를 G3에 포함했다 — 개발자 확인.
 
-### G3~G4 예상 필드 (earth_cards.md 기준 — 다음 슬라이스에서 확정)
+### G4 예상 범위 (earth_cards.md 기준 — 다음 슬라이스에서 확정)
 
-- **G3 (반응/임계 방어 + 아군):** Bedrock(Guard≥4→피해 -20%, get_incoming_multiplier와 유사),
-  Unshakable Will(저HP 트리거로 Guard 만충), Earthen Bond(인접 아군 피격 시 소비→아군 AMR),
-  Earthen Empathy/Provoke(Guard≥3 임계) — F2 반응형 패턴과 유사.
-- **G4 (Growth + AoE + 고급):** 턴종료 훅 신규 필요(Earthen Nourishment 등 Growth 계열),
-  적 AI 타겟 override 신규 필요(Provoke/Impenetrable Fortress), Tremor(AoE), Binding Roots(위치 교환).
+- **Provoke / Impenetrable Fortress:** 적 AI 타겟 선택 로직(`_run_enemy_turn`) 오버라이드 신규 필요 —
+  G3에서 제외된 채로 이월.
+- **Growth 계열(Earthen Nourishment/Root Sharing/Steadfast Growth):** 턴종료 훅 신규 필요 — 현재
+  `_on_turn_started()`(턴 시작)만 존재, 턴 종료 시점 훅이 없음.
+- **Steadfast Stance:** "대기(미이동)" 추적 훅 신규 필요.
+- **Tremor/Earthquake Fury(AoE), Binding Roots(위치 교환), Eternal Earth(Epic)** 등 나머지 카드.
 
 ### StatusEffects에 추가될 동작
 
 - **FROST (Type = 1):** SPD 감소 + 임계 시 Freeze (행동 취소) — Frost 슬라이스에서 명세
 - **GUARD (Type = 2):** G1에서 "AMR 증가"(`effective_armor()`) + "피격 시 반격"(`apply_guard_counter()`)
-  구현 완료. G2에서 "소비→버스트/영구 AMR/영구 AMR 차감/임계 공격력 보너스" 구현 완료.
-  자연 감쇠 없음(불변 규칙 참고). G3~G4의 반응/임계 동작은 이후 슬라이스에서 명세.
+  구현 완료. G2에서 "소비→버스트/영구 AMR/영구 AMR 차감/임계 공격력 보너스" 구현 완료. G3에서
+  "임계 피해 감소(Bedrock)/저HP 만충(Unshakable Will)/인접 아군 1회성·지속 AMR 지원(Earthen
+  Bond/Empathy)/반격 후 다음 공격 보너스(Retaliatory Strike)" 구현 완료.
+  자연 감쇠 없음(불변 규칙 참고). G4(Provoke 등)의 동작은 이후 슬라이스에서 명세.

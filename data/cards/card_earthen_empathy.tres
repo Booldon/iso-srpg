@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://earth_empathy001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "earthen_empathy"
+title = "대지의 유대감"
+description = "자신 Guard 3 이상인 동안: 인접 아군 AMR+1 (조건 유지되는 한 지속)."
+element = 3
+tier = 1
+on_guard_threshold_ally_armor_bonus = 1
+on_guard_threshold_ally_armor_bonus_min = 3
