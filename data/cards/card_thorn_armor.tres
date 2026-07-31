@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://earth_thornarm01"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "thorn_armor"
+title = "가시 갑옷"
+description = "Guard 반격 데미지 2배."
+element = 3
+tier = 1
+counter_damage_multiplier = 2.0

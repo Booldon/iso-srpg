@@ -184,6 +184,7 @@ func _resolve_full_attack(attacker: Unit, target: Unit, hit_armor: bool) -> void
 	Combat.resolve_attack(attacker, target, hit_armor, dmg_mult)
 	CardEffects.apply_on_attack(attacker, target)
 	CardEffects.apply_on_hit(attacker, target)
+	CardEffects.apply_guard_counter(attacker, target)  # G1 신규: Guard 반격
 	_apply_ashen_ward(attacker, target)
 	CardEffects.apply_on_attack_aoe(attacker, _splash_targets(target), _living_enemies())
 	# F4: refresh Brittle Coat AMR debuff after all burn changes this attack
@@ -537,6 +538,8 @@ func _place_players() -> void:
 			unit.stats.armor      = maxi(0, unit.stats.armor      + card.battle_start_armor_bonus)
 			unit.stats.speed      = maxi(1, unit.stats.speed      + card.battle_start_spd_bonus)
 			unit.stats.move_range = maxi(1, unit.stats.move_range + card.battle_start_move_bonus)
+			if card.battle_start_guard > 0:
+				StatusEffects.add(unit, StatusEffects.Type.GUARD, card.battle_start_guard)
 		unit.roster_path = rec["path"]
 		unit.grid_col = cell.x
 		unit.grid_row = cell.y

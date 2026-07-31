@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://earth_smite0001"]
+
+[ext_resource type="Script" path="res://scripts/data/card_data.gd" id="1_card"]
+
+[resource]
+script = ExtResource("1_card")
+id = "earthen_smite"
+title = "대지 강타"
+description = "공격 시: 자신 Guard +1 스택."
+element = 3
+tier = 1
+on_attack_guard_self = 1

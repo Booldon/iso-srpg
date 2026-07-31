@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="DebugScenario" format=3 uid="uid://dbgscn0guard1"]
+
+[ext_resource type="Script" path="res://scripts/data/debug_scenario.gd" id="1_dbgscn"]
+
+[resource]
+script = ExtResource("1_dbgscn")
+label = "전투: Guard 테스트 (Bulwark+Smite+Thorn Armor)"
+target_scene = "res://scenes/battle/grid.tscn"
+current_stage = 0
+active_cards = []
+debug_player_cards = ["res://data/cards/card_earthen_bulwark.tres", "res://data/cards/card_earthen_smite.tres", "res://data/cards/card_thorn_armor.tres"]

@@ -5,7 +5,7 @@ class_name StatusEffects
 enum Type {
 	BURN  = 0,   # 턴 시작 시 STR 데미지 + 자연 감쇠
 	FROST = 1,   # SPD 감소 (미구현, 예약됨)
-	GUARD = 2    # AMR 증가 + 반격 (미구현, 예약됨)
+	GUARD = 2    # AMR 증가(unit.effective_armor()) + 피격 시 반격(CardEffects.apply_guard_counter()) — G1 구현됨. 자연 감쇠 없음
 }
 
 # Burn 스택의 상한선. add() 호출 결과가 이 값을 초과하지 않도록 클램프.

@@ -103,3 +103,17 @@ enum Tier { COMMON, RARE, EPIC }
 # Brittle Coat 발동 최소 Burn 스택. get_stacks(enemy, BURN) >= 이 값이면 디버프 활성.
 # on_burn_threshold_armor_debuff == 0이면 이 값은 무시됨.
 @export var on_burn_threshold_armor_min: int = 3
+
+# --- Guard 부여 (G1 슬라이스 — 구현됨) ---
+# 전투 시작 시(배치 직후) 이 카드를 보유한 유닛 자신에게 부여하는 Guard 스택 (Earthen Bulwark).
+# 0이면 no-op. 처리 책임: grid_manager._place_players().
+@export var battle_start_guard: int = 0
+
+# 공격 시(apply_on_attack) 공격자 자신에게 부여하는 Guard 스택 (Earthen Smite).
+# 0이면 no-op. target이 아니라 attacker에게 적용됨에 주의.
+@export var on_attack_guard_self: int = 0
+
+# --- Guard 반격 증폭 (G1 슬라이스 — 구현됨) ---
+# 이 유닛(피격자)이 보유 시, innate Guard 반격 데미지에 곱할 배수 (Thorn Armor).
+# 여러 장 보유 시 곱셈적으로 합산. 1.0이면 no-op.
+@export var counter_damage_multiplier: float = 1.0

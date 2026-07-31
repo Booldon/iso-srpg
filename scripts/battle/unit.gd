@@ -38,11 +38,13 @@ func effective_strength() -> int:
 	return stats.strength + temp_strength
 
 
-# Returns effective Armor = max(0, stats.armor - burn_armor_debuff).
+# Returns effective Armor = max(0, stats.armor + guard_stacks - burn_armor_debuff).
+# Guard stacks (G1) raise effective AMR by 1 per stack; Brittle Coat debuff still subtracts.
 # Used in the strength-hit path of Combat.resolve_attack(). Read-only — does not modify state.
 # armor-hit (direct stats.armor deduction) bypasses this method.
 func effective_armor() -> int:
-	return maxi(0, stats.armor - burn_armor_debuff)
+	var guard := StatusEffects.get_stacks(self, StatusEffects.Type.GUARD)
+	return maxi(0, stats.armor + guard - burn_armor_debuff)
 
 
 # Returns true if this unit is still alive (effective_strength > 0).

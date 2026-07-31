@@ -1,7 +1,7 @@
 # Card / Status-Effect System — API Contract
 
-**Version:** 1.4 (F4 — Burn tick modifiers: White Heat, Smolder, High Density, Brittle Coat)
-**Date:** 2026-07-15  
+**Version:** 1.5 (G1 — Earth/Guard baseline: stack→AMR, innate counter-damage, Earthen Bulwark/Smite/Thorn Armor)
+**Date:** 2026-07-31  
 **Owner:** systems-designer  
 **Status:** Confirmed — implementation may begin
 
@@ -159,6 +159,20 @@ enum Tier { COMMON, RARE, EPIC }
 # Brittle Coat 발동 최소 Burn 스택. get_stacks(enemy, BURN) >= 이 값이면 디버프 활성.
 # on_burn_threshold_armor_debuff == 0이면 이 값은 무시됨.
 @export var on_burn_threshold_armor_min: int = 3
+
+# --- Guard 부여 (G1 슬라이스 — 구현됨) ---
+# 전투 시작 시(배치 직후) 이 카드를 보유한 유닛 자신에게 부여하는 Guard 스택 (Earthen Bulwark).
+# 0이면 no-op. 처리 책임: grid_manager._place_players() battle-start 루프.
+@export var battle_start_guard: int = 0
+
+# 공격 시(apply_on_attack) 공격자 자신에게 부여하는 Guard 스택 (Earthen Smite).
+# 0이면 no-op. target이 아니라 attacker 자신에게 적용됨에 주의 (Burn 부여와 반대 방향).
+@export var on_attack_guard_self: int = 0
+
+# --- Guard 반격 증폭 (G1 슬라이스 — 구현됨) ---
+# 이 유닛(피격자)이 보유 시, innate Guard 반격 데미지에 곱할 배수 (Thorn Armor).
+# 여러 장 보유 시 곱셈적으로 합산. 1.0이면 no-op.
+@export var counter_damage_multiplier: float = 1.0
 ```
 
 ### CardData 불변 규칙
@@ -235,8 +249,9 @@ func is_alive() -> bool
 # 적용 대상: STR hit 공격, Burn 틱 데미지, detonation burst — 모두 이 함수 경유.
 func take_str_damage(amount: int) -> void
 
-# ── 메서드 (신규 — F4 슬라이스) ─────────────────────────────────────────────
-# 현재 유효 Armor = max(0, stats.armor - burn_armor_debuff).
+# ── 메서드 (F4 슬라이스, G1에서 Guard 반영으로 갱신) ─────────────────────────
+# 현재 유효 Armor = max(0, stats.armor + guard_stacks - burn_armor_debuff).
+# guard_stacks = StatusEffects.get_stacks(self, GUARD). Guard 스택 1당 AMR +1 (G1).
 # Combat.resolve_attack()의 strength-hit 경로가 stats.armor 대신 이 값을 사용.
 # armor-hit(방어 차감 공격)는 base stats.armor를 직접 차감 (이 함수와 무관).
 # 읽기 전용 계산 — unit의 상태를 수정하지 않음.
@@ -381,13 +396,18 @@ class_name CardEffects
 #   - on_attack_burn_decay_slow == true: target.burn_decay_slowed = true
 #     (한 번 설정되면 전투 내내 유지 — 리셋 조건 없음)
 #
-# 순서 불변 규칙: [1] Burn 부여 → [2] Detonation → [3] 틱 수정자. 순서 역전 금지.
+# [4] Guard 자가 부여 (G1 신규 — [1][2][3] 이후에 처리):
+#   attacker.cards 순회: on_attack_guard_self > 0 인 카드마다
+#     StatusEffects.add(attacker, GUARD, card.on_attack_guard_self)  ← target이 아니라 attacker 자신
+#
+# 순서 불변 규칙: [1] Burn 부여 → [2] Detonation → [3] 틱 수정자 → [4] Guard 자가 부여. 순서 역전 금지.
 #
 # 호출 위치 (grid_manager._resolve_full_attack → _sweep_deaths):
 #   var dmg_mult := CardEffects.get_incoming_multiplier(attacker, target)
 #   Combat.resolve_attack(attacker, target, hit_armor, dmg_mult)
 #   CardEffects.apply_on_attack(attacker, target)
 #   CardEffects.apply_on_hit(attacker, target)
+#   CardEffects.apply_guard_counter(attacker, target)  ← G1 신규
 #   grid_manager._apply_ashen_ward(attacker, target)
 #   CardEffects.apply_on_attack_aoe(attacker, _splash_targets(target), _living_enemies())
 #   grid_manager._refresh_burn_armor_debuffs()  ← F4 신규
@@ -440,6 +460,27 @@ static func apply_on_hit(attacker: Unit, target: Unit) -> void
 # 적 유닛은 cards == [] 이므로 자동 no-op (attacker가 적일 때).
 # 호출 위치: grid_manager._resolve_full_attack() 내부, apply_on_hit() 직후.
 static func apply_on_attack_aoe(attacker: Unit, splash_targets: Array[Unit], all_enemies: Array[Unit]) -> void
+
+
+# Guard 반격 (G1 신규): target(피격자)이 Guard 스택 보유 시 attacker에 방어무시 반격 데미지.
+#
+# innate 효과 — 특정 카드로 게이팅되지 않음 (Guard 스택만 있으면 항상 발동, Burn 부여와 달리
+# on_attack 계열 필드로 발동 조건을 걸지 않음). 스택 소비 없음 (반격해도 Guard는 그대로 유지).
+#
+# 계산:
+#   stacks = StatusEffects.get_stacks(target, GUARD)
+#   if stacks <= 0: return  (no-op)
+#   mult = 1.0; target.cards 순회: counter_damage_multiplier > 1.0인 카드마다 mult *= 그 값 (Thorn Armor)
+#   counter = roundi(stacks × GUARD_COUNTER_PER_STACK(=1) × mult)
+#   if counter > 0: attacker.take_str_damage(counter)  ← 방어 무시 (armor 차감 없음)
+#
+# 상수: GUARD_COUNTER_PER_STACK = 1 (고정값 — decisions_log "스택 기반 데미지는 고정값" 규약,
+# 2026-07-12 Earth 카운터뎀 stacks×2→stacks×1 너프 반영값).
+#
+# 사망 판정은 호출자(grid_manager._sweep_deaths)의 책임. 적 유닛도 Guard 스택을 가질 수 있으므로
+# attacker가 플레이어여도 반격 대상이 될 수 있음 (대칭적 innate 효과).
+# 호출 위치: grid_manager._resolve_full_attack() 내부, apply_on_hit() 직후.
+static func apply_guard_counter(attacker: Unit, target: Unit) -> void
 
 
 # Ember Trace: 불붙은 상태로 사망한 유닛의 Burn 스택 일부를 인접 살아있는 적에게 전이한다 (F3 신규).
@@ -514,10 +555,15 @@ func _refresh_burn_armor_debuffs() -> void
 | `scripts/battle/card_effects.gd` | combat-programmer | F4: `apply_on_attack()` [3] 틱 수정자 블록 추가, detonation consume-all 버그 수정, aoe fill_max `unit.burn_max` 기준 갱신 |
 | `scripts/battle/unit.gd` | combat-programmer | F4: `burn_max`, `burn_tick_mult_next`, `burn_decay_slowed`, `_burn_decay_skip`, `burn_armor_debuff` 필드, `effective_armor()` 추가 |
 | `scripts/battle/combat.gd` | combat-programmer | F4: strength-hit 경로가 `target.effective_armor()` 사용으로 갱신 |
-| `scripts/battle/grid_manager.gd` | combat-programmer | F4: `_setup_burn_caps()`, `_refresh_burn_armor_debuffs()` 추가; `_resolve_full_attack()` 끝·턴 시작 후 디버프 갱신 호출 추가 |
+| `scripts/battle/grid_manager.gd` | combat-programmer | F4: `_setup_burn_caps()`, `_refresh_burn_armor_debuffs()` 추가; `_resolve_full_attack()` 끝·턴 시작 후 디버프 갱신 호출 추가. G1: `_place_players()` battle-start 루프에 `battle_start_guard` 적용, `_resolve_full_attack()`에 `apply_guard_counter()` 호출 추가 |
 | `scenes/battle/*.tscn` | ui-programmer | 변경 없음 |
-| `scripts/battle/stats_panel.gd` | ui-programmer | F4: AMR 표시에 `burn_armor_debuff` 병기 (예: `ARM  3 (-2)`) |
+| `scripts/battle/stats_panel.gd` | ui-programmer | F4: AMR 표시에 `burn_armor_debuff` 병기 (예: `ARM  3 (-2)`). G1: Guard 스택 보유 시 AMR에 `(+N)` 병기 + `GUARD N` 표시 |
 | `docs/systems/card_system_api.md` | systems-designer | 이 문서 (계약 변경 시 먼저 여기 업데이트) |
+
+G1 신규: `card_data.gd`에 `battle_start_guard` / `on_attack_guard_self` / `counter_damage_multiplier` 추가.
+`card_effects.gd`에 `apply_on_attack()` [4] Guard 자가 부여 블록 + 신규 `apply_guard_counter()` 추가.
+`unit.gd`의 `effective_armor()`가 Guard 스택을 합산하도록 갱신 (별도 신규 필드는 없음 — `StatusEffects.get_stacks()` 직접 조회).
+`data/cards/*.tres`(data-balancer)에 `card_earthen_bulwark`, `card_earthen_smite`, `card_thorn_armor` 추가.
 
 ---
 
@@ -537,25 +583,33 @@ func _refresh_burn_armor_debuffs() -> void
 | temp STR 성격 | 공격력·HP 양쪽 적용 (effective_strength()) | 단일 스탯 원칙 유지, Fire=버스트 정체성 강화 |
 | temp STR 차감 순서 | temp 버퍼 먼저, 이후 base STR | decisions_log.md "Temp STR depletion order" |
 | detonation 데미지 | 방어 무시 (armor 차감 없음) | 폭발 = 관통 페이오프 |
-| strength-hit 유효 방어 | `target.effective_armor()` = `max(0, armor - burn_armor_debuff)` | Brittle Coat 지속 디버프 반영 (F4) |
+| strength-hit 유효 방어 | `target.effective_armor()` = `max(0, armor + guard_stacks - burn_armor_debuff)` | Brittle Coat 지속 디버프 + Guard 스택 보너스 반영 (G1) |
 | 사망 판정 책임 | grid_manager (`tick_turn_start` / `apply_on_attack` 호출 후 `is_alive()` 체크) | StatusEffects / CardEffects는 stats만 수정 |
+| Guard 반격 데미지 | `stacks × 1 × counter_mult` 방어 무시 (고정값) | decisions_log "Earth counter-damage coefficient reduced: ×2 → ×1 (2026-07-12)" — innate 효과, 스택 소비 없음 |
 
 ---
 
 ## 미래 확장 계약 (예약 공간 — 현재 슬라이스에서 구현하지 않음)
 
-구현 완료 슬라이스: F1(detonation+temp STR+Solar), F2(반응형 방어), F3(AoE+on-death 전이), F4(틱 수정자).
+구현 완료 슬라이스: F1(detonation+temp STR+Solar), F2(반응형 방어), F3(AoE+on-death 전이), F4(틱 수정자),
+G1(Guard 기반: 스택→AMR + innate 반격, Earthen Bulwark/Smite/Thorn Armor).
 → 해당 필드는 모두 계약 A CardData 스키마 참고.
 
-### CardData에 추가될 필드 (예상 — Guard 슬라이스)
+**참고:** G1 계획 당시 예약해 두었던 `on_hit_guard` / `on_hit_counter_damage_multiplier` 필드명은
+실제 구현에서 `battle_start_guard` / `on_attack_guard_self` / `counter_damage_multiplier`로
+확정됐다 (반격이 `on_hit`이 아니라 innate 효과로 처리되어 게이팅 카드 필드가 불필요해짐).
 
-```gdscript
-# Guard 슬라이스에서 추가 예정:
-@export var on_hit_guard: int = 0
-@export var on_hit_counter_damage_multiplier: float = 1.0
-```
+### G2~G4 예상 필드 (earth_cards.md 기준 — 다음 슬라이스에서 확정)
+
+- **G2 (Guard 소비 페이오프):** Crush/Cataclysm류 소비-버스트 필드 (Fire의 detonation 필드와 유사한
+  `on_attack_consume_guard` / `on_attack_guard_burst_per_stack` 패턴 예상), 적 AMR 영구 차감(Fracture).
+- **G3 (반응/임계 방어 + 아군):** Guard≥N 임계 조건부 효과(Bedrock/Center of Gravity), 저HP 트리거
+  (Unshakable Will), 인접 아군 소비-전이(Earthen Bond) — F2 반응형 패턴과 유사.
+- **G4 (Growth + AoE + 고급):** 턴종료 훅 신규 필요(Earthen Nourishment 등 Growth 계열),
+  적 AI 타겟 override 신규 필요(Provoke/Impenetrable Fortress).
 
 ### StatusEffects에 추가될 동작
 
 - **FROST (Type = 1):** SPD 감소 + 임계 시 Freeze (행동 취소) — Frost 슬라이스에서 명세
-- **GUARD (Type = 2):** 피격 시 반격 + AMR 임시 증가 — Guard 슬라이스에서 명세
+- **GUARD (Type = 2):** G1에서 "AMR 증가"(`effective_armor()`) + "피격 시 반격"(`apply_guard_counter()`)
+  구현 완료. 자연 감쇠 없음(불변 규칙 참고). G2~G4의 소비/임계 동작은 이후 슬라이스에서 명세.

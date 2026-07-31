@@ -13,8 +13,13 @@ func show_unit(unit: Unit) -> void:
 		_str_label.text = "STR  %d (+%d)" % [unit.stats.strength, unit.temp_strength]
 	else:
 		_str_label.text = "STR  " + str(unit.stats.strength)
-	# Show base armor; if burn_armor_debuff > 0, append "(-debuff)" so player can see the penalty
-	if unit.burn_armor_debuff > 0:
+	# Show base armor; append "(+guard)" and/or "(-debuff)" so player can see Guard bonus / Brittle Coat penalty
+	var guard := StatusEffects.get_stacks(unit, StatusEffects.Type.GUARD)
+	if guard > 0 and unit.burn_armor_debuff > 0:
+		_arm_label.text = "ARM  %d (+%d) (-%d)" % [unit.stats.armor, guard, unit.burn_armor_debuff]
+	elif guard > 0:
+		_arm_label.text = "ARM  %d (+%d)" % [unit.stats.armor, guard]
+	elif unit.burn_armor_debuff > 0:
 		_arm_label.text = "ARM  %d (-%d)" % [unit.stats.armor, unit.burn_armor_debuff]
 	else:
 		_arm_label.text = "ARM  " + str(unit.stats.armor)
@@ -22,3 +27,5 @@ func show_unit(unit: Unit) -> void:
 	var burn := StatusEffects.get_stacks(unit, StatusEffects.Type.BURN)
 	if burn > 0:
 		_spd_label.text += "    BURN " + str(burn)
+	if guard > 0:
+		_spd_label.text += "    GUARD " + str(guard)

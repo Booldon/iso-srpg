@@ -1,5 +1,8 @@
 class_name CardEffects
 
+# Guard 반격의 스택당 고정 데미지 (decisions_log 규약: 스택 기반 데미지는 고정값, 스탯 비례 아님).
+const GUARD_COUNTER_PER_STACK: int = 1
+
 
 # attacker의 cards 배열을 순회하며 공격 시(on_attack) 효과를 target에 적용한다.
 #
@@ -62,6 +65,11 @@ static func apply_on_attack(attacker: Unit, target: Unit) -> void:
 		if card.on_attack_burn_decay_slow:
 			target.burn_decay_slowed = true
 
+	# [4] Guard 자가 부여 (G1: Earthen Smite) — attacker 자신에게 (target 아님)
+	for card: CardData in attacker.cards:
+		if card.on_attack_guard_self > 0:
+			StatusEffects.add(attacker, StatusEffects.Type.GUARD, card.on_attack_guard_self)
+
 
 # target의 cards에서 on_hit_dmg_reduction_burning 을 집계해 피해 배율을 반환한다 (F2).
 # 반환값: float (1.0 = 감소 없음). Combat.resolve_attack(dmg_mult) 에 전달.
@@ -108,6 +116,25 @@ static func apply_on_attack_aoe(
 			for u: Unit in all_enemies:
 				if StatusEffects.get_stacks(u, StatusEffects.Type.BURN) > 0:
 					u.take_str_damage(card.on_attack_aoe_burst_all_burning)
+
+
+# Guard 반격 (G1 신규): target(피격자)이 Guard 스택 보유 시 attacker에 방어무시 반격 데미지.
+# innate 효과 — 카드로 게이팅되지 않음(Guard 스택만 있으면 항상 발동). 스택 소비 없음.
+# 반격 = stacks × GUARD_COUNTER_PER_STACK × counter_mult.
+# counter_mult: target.cards의 counter_damage_multiplier 곱셈 합산 (Thorn Armor). 없으면 1.0.
+# 적 유닛은 cards == [] 이므로 counter_mult는 항상 1.0 (하지만 적도 Guard 스택은 가질 수 있음).
+# 사망 판정은 호출자(grid_manager._sweep_deaths)의 책임.
+static func apply_guard_counter(attacker: Unit, target: Unit) -> void:
+	var stacks: int = StatusEffects.get_stacks(target, StatusEffects.Type.GUARD)
+	if stacks <= 0:
+		return
+	var mult := 1.0
+	for card: CardData in target.cards:
+		if card.counter_damage_multiplier > 1.0:
+			mult *= card.counter_damage_multiplier
+	var counter: int = roundi(stacks * GUARD_COUNTER_PER_STACK * mult)
+	if counter > 0:
+		attacker.take_str_damage(counter)
 
 
 # Ember Trace: 불붙은 상태로 사망한 적의 Burn 스택 절반(올림)을 인접 적에 전이한다 (F3 신규).
